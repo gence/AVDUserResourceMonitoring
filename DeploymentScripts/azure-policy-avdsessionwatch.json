@@ -1,0 +1,152 @@
+{
+  "properties": {
+    "displayName": "Deploy AVDSessionWatch monitoring to Windows VMs",
+    "mode": "indexed",
+    "policyType": "Custom",
+    "description": "Automatically deploy AVDSessionWatch scripts to new Windows VMs using Custom Script Extension",
+    "metadata": {
+      "category": "Monitoring",
+      "version": "1.0.0"
+    },
+    "version": "1.0.0",
+    "parameters": {
+      "storageAccountName": {
+        "type": "string",
+        "metadata": {
+          "displayName": "Storage Account Name",
+          "description": "Storage account containing the monitoring scripts"
+        }
+      },
+      "containerName": {
+        "type": "string",
+        "defaultValue": "avdsessionwatch-scripts",
+        "metadata": {
+          "displayName": "Container Name",
+          "description": "Blob container name containing the scripts"
+        }
+      },
+      "effect": {
+        "type": "string",
+        "defaultValue": "DeployIfNotExists",
+        "allowedValues": [
+          "DeployIfNotExists",
+          "Disabled"
+        ],
+        "metadata": {
+          "displayName": "Effect",
+          "description": "Enable or disable the execution of the policy"
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Compute/virtualMachines"
+          },
+          {
+            "field": "Microsoft.Compute/virtualMachines/storageProfile.osDisk.osType",
+            "equals": "Windows"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "type": "Microsoft.Compute/virtualMachines/extensions",
+          "name": "AVDSessionWatchSetup",
+          "existenceCondition": {
+            "allOf": [
+              {
+                "field": "Microsoft.Compute/virtualMachines/extensions/type",
+                "equals": "CustomScriptExtension"
+              },
+              {
+                "field": "Microsoft.Compute/virtualMachines/extensions/publisher",
+                "equals": "Microsoft.Compute"
+              },
+              {
+                "field": "Microsoft.Compute/virtualMachines/extensions/provisioningState",
+                "equals": "Succeeded"
+              }
+            ]
+          },
+          "roleDefinitionIds": [
+            "/providers/Microsoft.Authorization/roleDefinitions/9980e02c-c2be-4d73-94e8-173b1dc7cf3c"
+          ],
+          "deployment": {
+            "properties": {
+              "mode": "incremental",
+              "template": {
+                "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                "contentVersion": "1.0.0.0",
+                "parameters": {
+                  "vmName": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "storageAccountName": {
+                    "type": "string"
+                  },
+                  "containerName": {
+                    "type": "string"
+                  }
+                },
+                "variables": {
+                  "extensionName": "AVDSessionWatchSetup",
+                  "baseUri": "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/', parameters('containerName'), '/')]",
+                  "scriptUri": "[concat(variables('baseUri'), 'install-avdsessionwatch.ps1')]"
+                },
+                "resources": [
+                  {
+                    "type": "Microsoft.Compute/virtualMachines/extensions",
+                    "apiVersion": "2023-03-01",
+                    "name": "[concat(parameters('vmName'), '/', variables('extensionName'))]",
+                    "location": "[parameters('location')]",
+                    "properties": {
+                      "publisher": "Microsoft.Compute",
+                      "type": "CustomScriptExtension",
+                      "typeHandlerVersion": "1.10",
+                      "autoUpgradeMinorVersion": true,
+                      "settings": {
+                        "fileUris": [
+                          "[variables('scriptUri')]",
+                          "[concat(variables('baseUri'), 'tasklist.ps1')]",
+                          "[concat(variables('baseUri'), 'sessions.ps1')]",
+                          "[concat(variables('baseUri'), 'cleanup.ps1')]",
+                          "[concat(variables('baseUri'), 'setup-tasks.bat')]",
+                          "[concat(variables('baseUri'), 'remove-tasks.bat')]"
+                        ]
+                      },
+                      "protectedSettings": {
+                        "commandToExecute": "powershell.exe -ExecutionPolicy Bypass -File install-avdsessionwatch.ps1",
+                        "managedIdentity": {}
+                      }
+                    }
+                  }
+                ]
+              },
+              "parameters": {
+                "vmName": {
+                  "value": "[field('name')]"
+                },
+                "location": {
+                  "value": "[field('location')]"
+                },
+                "storageAccountName": {
+                  "value": "[parameters('storageAccountName')]"
+                },
+                "containerName": {
+                  "value": "[parameters('containerName')]"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

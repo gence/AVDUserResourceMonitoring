@@ -1,0 +1,13 @@
+[
+  {
+    "TimeGenerated": "2025-11-08T15:30:45Z",
+    "HostName": "COMPUTERNAME",
+    "ImageName": "notepad.exe",
+    "PID": 1234,
+    "SessionName": "Console",
+    "SessionId": 1,
+    "MemUsageBytes": 12582912,
+    "UserName": "DOMAIN\\username",
+    "CPUTimeSeconds": 125
+  }
+]

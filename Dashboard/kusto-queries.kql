@@ -1,0 +1,252 @@
+// ==============================================================================
+// Kusto KQL Queries for Azure Virtual Desktop Resource Usage Analysis
+// ==============================================================================
+// Table Name: AVDUserProcesses_CL
+// ==============================================================================
+
+// ------------------------------------------------------------------------------
+// Query 1: Top Users By Average Overall Memory Usage Across All Session Hosts
+// ------------------------------------------------------------------------------
+// This query aggregates memory usage per user across all hosts and time periods
+// First sum all processes per user per timestamp, then average across time
+AVDUserProcesses_CL
+| summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) 
+            by UserName, HostName, TimeGenerated
+| summarize AvgMemoryBytes = avg(TotalMemoryBytesAtTime), 
+            TotalSamples = count() 
+            by UserName
+| extend AvgMemoryMB = round(AvgMemoryBytes / 1024.0 / 1024.0, 2)
+| top 20 by AvgMemoryMB desc
+| project UserName, AvgMemoryMB, TotalSamples
+| order by AvgMemoryMB desc
+
+// ------------------------------------------------------------------------------
+// Query 2: Top Users By Average Overall CPU Usage (Non-Cumulative) Across All Session Hosts
+// ------------------------------------------------------------------------------
+// This calculates CPU usage rate by looking at CPU time differences between observations
+// First calculate per-process CPU, then sum by user per timestamp, then average
+AVDUserProcesses_CL
+| where CPUTimeSeconds > 0  // Only consider processes with CPU activity
+| sort by HostName, ImageName, PID, TimeGenerated asc
+| extend PrevCPUTime = prev(CPUTimeSeconds, 1)
+| extend PrevTimeGenerated = prev(TimeGenerated, 1)
+| extend PrevPID = prev(PID, 1)
+| extend PrevHostName = prev(HostName, 1)
+| extend PrevImageName = prev(ImageName, 1)
+| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName
+| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)
+| extend CPUDiff = CPUTimeSeconds - PrevCPUTime
+| where TimeDiffSeconds > 0 and CPUDiff >= 0
+| extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds
+| summarize TotalCPUPercentageAtTime = sum(CPUPercentage) 
+            by UserName, HostName, TimeGenerated
+| summarize AvgCPUPercentage = avg(TotalCPUPercentageAtTime), 
+            TotalSamples = count() 
+            by UserName
+| top 20 by AvgCPUPercentage desc
+| project UserName, AvgCPUPercentage = round(AvgCPUPercentage, 2), TotalSamples
+| order by AvgCPUPercentage desc
+
+// ------------------------------------------------------------------------------
+// Query 3: Top Processes (ImageName) Used By Users Overall By Overall Average Memory
+// ------------------------------------------------------------------------------
+AVDUserProcesses_CL
+| summarize AvgMemoryBytes = avg(MemUsageBytes), 
+            UniqueUsers = dcount(UserName),
+            TotalSamples = count() 
+            by ImageName
+| extend AvgMemoryMB = round(AvgMemoryBytes / 1024.0 / 1024.0, 2)
+| top 20 by AvgMemoryMB desc
+| project Process = ImageName, AvgMemoryMB, UniqueUsers, TotalSamples
+| order by AvgMemoryMB desc
+
+// ------------------------------------------------------------------------------
+// Query 4: Top Processes (ImageName) Used By Users Overall By Overall Average CPU Usage (Non-Cumulative)
+// ------------------------------------------------------------------------------
+AVDUserProcesses_CL
+| where CPUTimeSeconds > 0
+| sort by HostName, ImageName, PID, TimeGenerated asc
+| extend PrevCPUTime = prev(CPUTimeSeconds, 1)
+| extend PrevTimeGenerated = prev(TimeGenerated, 1)
+| extend PrevPID = prev(PID, 1)
+| extend PrevHostName = prev(HostName, 1)
+| extend PrevImageName = prev(ImageName, 1)
+| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName
+| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)
+| extend CPUDiff = CPUTimeSeconds - PrevCPUTime
+| where TimeDiffSeconds > 0 and CPUDiff >= 0
+| extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds
+| summarize AvgCPUPercentage = avg(CPUPercentage), 
+            UniqueUsers = dcount(UserName),
+            TotalSamples = count() 
+            by ImageName
+| top 20 by AvgCPUPercentage desc
+| project Process = ImageName, AvgCPUPercentage = round(AvgCPUPercentage, 2), UniqueUsers, TotalSamples
+| order by AvgCPUPercentage desc
+
+// ------------------------------------------------------------------------------
+// Query 5: Top Processes by Memory Usage Used By Top Users of Overall Memory Usage
+// ------------------------------------------------------------------------------
+// First identify top memory users (by total usage), then show their process breakdown
+let TopMemoryUsers = AVDUserProcesses_CL
+    | summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) 
+                by UserName, HostName, TimeGenerated
+    | summarize AvgMemoryBytes = avg(TotalMemoryBytesAtTime) by UserName
+    | top 10 by AvgMemoryBytes desc
+    | project UserName;
+AVDUserProcesses_CL
+| where UserName in (TopMemoryUsers)
+| summarize AvgMemoryBytes = avg(MemUsageBytes),
+            TotalCollectedDataPoints = count()
+            by UserName, ImageName
+| extend AvgMemoryMB = round(AvgMemoryBytes / 1024.0 / 1024.0, 2)
+| top 50 by AvgMemoryMB desc
+| project UserName, Process = ImageName, AvgMemoryMB, TotalCollectedDataPoints
+| order by AvgMemoryMB desc
+
+// ------------------------------------------------------------------------------
+// Query 6: Top Processes by CPU Usage (Non-Cumulative) Used By Top Users of Overall CPU Usage
+// ------------------------------------------------------------------------------
+// First identify top CPU users (by total usage), then show their process breakdown
+let TopCPUUsers = AVDUserProcesses_CL
+    | where CPUTimeSeconds > 0
+    | sort by HostName, ImageName, PID, TimeGenerated asc
+    | extend PrevCPUTime = prev(CPUTimeSeconds, 1)
+    | extend PrevTimeGenerated = prev(TimeGenerated, 1)
+    | extend PrevPID = prev(PID, 1)
+    | extend PrevHostName = prev(HostName, 1)
+    | extend PrevImageName = prev(ImageName, 1)
+    | where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName
+    | extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)
+    | extend CPUDiff = CPUTimeSeconds - PrevCPUTime
+    | where TimeDiffSeconds > 0 and CPUDiff >= 0
+    | extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds
+    | summarize TotalCPUPercentageAtTime = sum(CPUPercentage) 
+                by UserName, HostName, TimeGenerated
+    | summarize AvgCPUPercentage = avg(TotalCPUPercentageAtTime) by UserName
+    | top 10 by AvgCPUPercentage desc
+    | project UserName;
+AVDUserProcesses_CL
+| where UserName in (TopCPUUsers)
+| where CPUTimeSeconds > 0
+| sort by HostName, ImageName, PID, TimeGenerated asc
+| extend PrevCPUTime = prev(CPUTimeSeconds, 1)
+| extend PrevTimeGenerated = prev(TimeGenerated, 1)
+| extend PrevPID = prev(PID, 1)
+| extend PrevHostName = prev(HostName, 1)
+| extend PrevImageName = prev(ImageName, 1)
+| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName
+| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)
+| extend CPUDiff = CPUTimeSeconds - PrevCPUTime
+| where TimeDiffSeconds > 0 and CPUDiff >= 0
+| extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds
+| summarize AvgCPUPercentage = avg(CPUPercentage),
+            TotalInstances = count()
+            by UserName, ImageName
+| top 50 by AvgCPUPercentage desc
+| project UserName, Process = ImageName, AvgCPUPercentage = round(AvgCPUPercentage, 2), TotalInstances
+| order by AvgCPUPercentage desc
+
+// ------------------------------------------------------------------------------
+// Query 7: Overall Resource Consumption Score By User
+// ------------------------------------------------------------------------------
+// This creates a composite score based on normalized CPU and Memory usage
+// Score = (Normalized CPU % * 0.5) + (Normalized Memory % * 0.5)
+// First sum all processes per user per timestamp, then calculate averages
+let UserMemory = AVDUserProcesses_CL
+    | summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) 
+                by UserName, HostName, TimeGenerated
+    | summarize AvgMemoryBytes = avg(TotalMemoryBytesAtTime), 
+                TotalMemorySamples = count() 
+                by UserName;
+let UserCPU = AVDUserProcesses_CL
+    | where CPUTimeSeconds > 0
+    | sort by HostName, ImageName, PID, TimeGenerated asc
+    | extend PrevCPUTime = prev(CPUTimeSeconds, 1)
+    | extend PrevTimeGenerated = prev(TimeGenerated, 1)
+    | extend PrevPID = prev(PID, 1)
+    | extend PrevHostName = prev(HostName, 1)
+    | extend PrevImageName = prev(ImageName, 1)
+    | where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName
+    | extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)
+    | extend CPUDiff = CPUTimeSeconds - PrevCPUTime
+    | where TimeDiffSeconds > 0 and CPUDiff >= 0
+    | extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds
+    | summarize TotalCPUPercentageAtTime = sum(CPUPercentage) 
+                by UserName, HostName, TimeGenerated
+    | summarize AvgCPUPercentage = avg(TotalCPUPercentageAtTime), 
+                TotalCPUSamples = count() 
+                by UserName;
+let MaxMemory = toscalar(UserMemory | summarize max(AvgMemoryBytes));
+let MaxCPU = toscalar(UserCPU | summarize max(AvgCPUPercentage));
+UserMemory
+| join kind=inner (UserCPU) on UserName
+| extend NormalizedMemory = (AvgMemoryBytes / MaxMemory) * 100.0
+| extend NormalizedCPU = (AvgCPUPercentage / MaxCPU) * 100.0
+| extend ResourceScore = round((NormalizedMemory * 0.5) + (NormalizedCPU * 0.5), 2)
+| extend AvgMemoryMB = round(AvgMemoryBytes / 1024.0 / 1024.0, 2)
+| extend AvgCPUPct = round(AvgCPUPercentage, 2)
+| project UserName, 
+          ResourceScore, 
+          AvgMemoryMB, 
+          AvgCPUPct, 
+          TotalSamples = TotalMemorySamples + TotalCPUSamples
+| top 25 by ResourceScore desc
+| order by ResourceScore desc
+
+// ==============================================================================
+// ADDITIONAL USEFUL QUERIES
+// ==============================================================================
+
+// ------------------------------------------------------------------------------
+// Query 8: User Activity Frequency (to identify power users vs occasional users)
+// ------------------------------------------------------------------------------
+AVDUserProcesses_CL
+| summarize DistinctDays = dcount(format_datetime(TimeGenerated, 'yyyy-MM-dd')),
+            DistinctHosts = dcount(HostName),
+            TotalRecords = count(),
+            FirstSeen = min(TimeGenerated),
+            LastSeen = max(TimeGenerated)
+            by UserName
+| extend DaysActive = datetime_diff('day', LastSeen, FirstSeen) + 1
+| extend ActivityFrequency = round((toreal(DistinctDays) / toreal(DaysActive)) * 100.0, 2)
+| project UserName, DistinctDays, DistinctHosts, TotalRecords, ActivityFrequency, FirstSeen, LastSeen
+| order by ActivityFrequency desc, TotalRecords desc
+
+// ------------------------------------------------------------------------------
+// Query 9: Host Load Analysis - Which hosts are most heavily utilized
+// ------------------------------------------------------------------------------
+AVDUserProcesses_CL
+| summarize TotalMemoryBytes = sum(MemUsageBytes),
+            UniqueUsers = dcount(UserName),
+            ProcessCount = count(),
+            AvgMemoryPerProcess = avg(MemUsageBytes)
+            by HostName, bin(TimeGenerated, 1h)
+| extend TotalMemoryGB = round(TotalMemoryBytes / 1024.0 / 1024.0 / 1024.0, 2)
+| project TimeGenerated, HostName, TotalMemoryGB, UniqueUsers, ProcessCount
+| order by TimeGenerated desc, TotalMemoryGB desc
+
+// ------------------------------------------------------------------------------
+// Query 10: Process Lifecycle - Long-running processes by user
+// ------------------------------------------------------------------------------
+AVDUserProcesses_CL
+| summarize FirstSeen = min(TimeGenerated),
+            LastSeen = max(TimeGenerated),
+            ObservationCount = count()
+            by HostName, UserName, ImageName, PID
+| extend LifetimeMinutes = datetime_diff('minute', LastSeen, FirstSeen)
+| where LifetimeMinutes > 60  // Processes running for more than 1 hour
+| project UserName, ImageName, PID, HostName, LifetimeMinutes, ObservationCount, FirstSeen, LastSeen
+| order by LifetimeMinutes desc
+
+// ==============================================================================
+// NOTES ON USAGE:
+// ==============================================================================
+// 1. Table name: AVDUserProcesses_CL
+// 2. Adjust the system account filters as needed for your environment
+// 3. CPU calculations assume the cumulative counter is in centiseconds (common format)
+//    If your counter is in different units, adjust the CPUPercentage calculation
+// 4. The top N limits (20, 10, 25, 50) can be adjusted based on your needs
+// 5. For time-based analysis, add "| where TimeGenerated > ago(7d)" to filter date ranges
+// 6. Resource Score weights (0.5 CPU, 0.5 Memory) can be adjusted based on priorities
+// ==============================================================================

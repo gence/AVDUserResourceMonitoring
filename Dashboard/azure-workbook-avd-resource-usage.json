@@ -1,0 +1,687 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "crossComponentResources": [
+          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+        ],
+        "parameters": [
+          {
+            "id": "b859a45e-162c-4c0e-8f24-27b0a0e9f7e0",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 259200000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 172800000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 1209600000
+                },
+                {
+                  "durationMs": 2419200000
+                },
+                {
+                  "durationMs": 2592000000
+                },
+                {
+                  "durationMs": 5184000000
+                },
+                {
+                  "durationMs": 7776000000
+                }
+              ],
+              "allowCustom": true
+            },
+            "timeContext": {
+              "durationMs": 86400000
+            },
+            "label": "Time Range"
+          },
+          {
+            "id": "56316156-9118-4d44-93b3-dc68efebe0d9",
+            "version": "KqlParameterItem/1.0",
+            "name": "HostPool",
+            "label": "Host Pools (RGs)",
+            "type": 2,
+            "isRequired": true,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n| where isnotempty(ResourceGroup)\r\n| summarize by ResourceGroup\r\n| order by ResourceGroup asc",
+            "crossComponentResources": [
+              "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "selectAllValue": "*",
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 604800000
+            },
+            "timeContextFromParameter": "TimeRange",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "value": [
+              "value::all"
+            ]
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters - time range"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\r\n### Resource Consumption"
+      },
+      "name": "text - section 2"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let UserMemory = AVDUserProcesses_CL\r\n    | where TimeGenerated {TimeRange}\r\n    | extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n    | where '*' in ({HostPool}) or ResourceGroup in ({HostPool})\r\n    | summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) \r\n                by UserName, HostName, TimeGenerated\r\n    | summarize AvgMemoryBytes = avg(TotalMemoryBytesAtTime), \r\n                TotalMemorySamples = count() \r\n                by UserName;\r\nlet UserCPU = AVDUserProcesses_CL\r\n    | where TimeGenerated {TimeRange}\r\n    | extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n    | where '*' in ({HostPool}) or ResourceGroup in ({HostPool})\r\n    | where CPUTimeSeconds > 0\r\n    | sort by HostName, ImageName, PID, TimeGenerated asc\r\n    | extend PrevCPUTime = prev(CPUTimeSeconds, 1)\r\n    | extend PrevTimeGenerated = prev(TimeGenerated, 1)\r\n    | extend PrevPID = prev(PID, 1)\r\n    | extend PrevHostName = prev(HostName, 1)\r\n    | extend PrevImageName = prev(ImageName, 1)\r\n    | where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName\r\n    | extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)\r\n    | extend CPUDiff = CPUTimeSeconds - PrevCPUTime\r\n    | where TimeDiffSeconds > 0 and CPUDiff >= 0\r\n    | extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds\r\n    | summarize TotalCPUPercentageAtTime = sum(CPUPercentage) \r\n                by UserName, HostName, TimeGenerated\r\n    | summarize AvgCPUPercentage = avg(TotalCPUPercentageAtTime), \r\n                TotalCPUSamples = count() \r\n                by UserName;\r\nlet MaxMemory = toscalar(UserMemory | summarize max(AvgMemoryBytes));\r\nlet MaxCPU = toscalar(UserCPU | summarize max(AvgCPUPercentage));\r\nUserMemory\r\n| join kind=inner (UserCPU) on UserName\r\n| extend NormalizedMemory = (AvgMemoryBytes / MaxMemory) * 100.0\r\n| extend NormalizedCPU = (AvgCPUPercentage / MaxCPU) * 100.0\r\n| extend ResourceScore = round((NormalizedMemory * 0.5) + (NormalizedCPU * 0.5), 2)\r\n| extend AvgMemoryMB = round(AvgMemoryBytes / 1024.0 / 1024.0, 2)\r\n| extend AvgCPUPct = round(AvgCPUPercentage, 2)\r\n| project UserName, \r\n          ResourceScore, \r\n          AvgMemoryMB, \r\n          AvgCPUPct, \r\n          TotalSamples = TotalMemorySamples + TotalCPUSamples\r\n| top 20 by ResourceScore desc\r\n| order by ResourceScore desc",
+        "size": 3,
+        "title": "Top 20 Users by Overall Resource Consumption Score",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+        ],
+        "visualization": "tiles",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ResourceScore",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "greenRed",
+                "customColumnWidthSetting": "40.1429ch"
+              }
+            },
+            {
+              "columnMatch": "AvgMemoryMB",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "AvgCPUPct",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "palette": "orange"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            }
+          ],
+          "labelSettings": [
+            {
+              "columnId": "UserName",
+              "label": "User Name"
+            },
+            {
+              "columnId": "ResourceScore",
+              "label": "Resource Consumption Score (0-100)"
+            },
+            {
+              "columnId": "AvgMemoryMB",
+              "label": "Avg Memory (MB)"
+            },
+            {
+              "columnId": "AvgCPUPct",
+              "label": "Avg CPU %"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Total Samples"
+            }
+          ]
+        },
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "UserName",
+            "formatter": 1
+          },
+          "subtitleContent": {
+            "columnMatch": "ResourceScore",
+            "formatter": 12,
+            "formatOptions": {
+              "min": 0,
+              "max": 100,
+              "palette": "purple"
+            },
+            "numberFormat": {
+              "unit": 0,
+              "options": {
+                "style": "decimal",
+                "useGrouping": false,
+                "maximumFractionDigits": 0
+              }
+            }
+          },
+          "leftContent": {
+            "columnMatch": "AvgMemoryMB",
+            "formatter": 0,
+            "numberFormat": {
+              "unit": 38,
+              "options": {
+                "style": "decimal",
+                "useGrouping": true,
+                "maximumFractionDigits": 2
+              }
+            },
+            "tooltipFormat": {
+              "tooltip": "Memory Use (MB)"
+            }
+          },
+          "rightContent": {
+            "columnMatch": "AvgCPUPct",
+            "formatter": 1,
+            "numberFormat": {
+              "unit": 1,
+              "options": {
+                "style": "decimal"
+              }
+            },
+            "tooltipFormat": {
+              "tooltip": "CPU"
+            }
+          },
+          "showBorder": true,
+          "sortCriteriaField": "ResourceScore",
+          "sortOrderField": 2,
+          "size": "auto",
+          "styleSettings": {
+            "backgroundColor": "colorGray100"
+          }
+        },
+        "graphSettings": {
+          "type": 0,
+          "topContent": {
+            "columnMatch": "UserName",
+            "formatter": 1
+          },
+          "centerContent": {
+            "columnMatch": "ResourceScore",
+            "formatter": 1,
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "maximumSignificantDigits": 3,
+                "maximumFractionDigits": 2
+              }
+            }
+          }
+        },
+        "statSettings": {
+          "valueField": "ResourceScore",
+          "valueAggregation": "None",
+          "colorSettings": {
+            "type": "static",
+            "mode": "background",
+            "heatmapPalette": "greenRed",
+            "thresholdsGrid": []
+          },
+          "iconSettings": {
+            "thresholdsGrid": [
+              {
+                "sourceColumn": "UserName"
+              }
+            ]
+          },
+          "tagText": "",
+          "valueFontStyle": "auto"
+        }
+      },
+      "name": "query - resource score",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n| where '*' in ({HostPool}) or ResourceGroup in ({HostPool})\r\n| summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) \r\n            by UserName, HostName, TimeGenerated\r\n| summarize AvgMemoryBytes = avg(TotalMemoryBytesAtTime), \r\n            TotalSamples = count() \r\n            by UserName\r\n| extend AvgMemoryMB = round(AvgMemoryBytes / 1024.0 / 1024.0, 2)\r\n| top 20 by AvgMemoryMB desc\r\n| project UserName, AvgMemoryMB, TotalSamples\r\n| order by AvgMemoryMB desc",
+        "size": 0,
+        "title": "Top 20 Users by Average Memory Usage",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "UserName",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "29ch"
+              }
+            },
+            {
+              "columnMatch": "AvgMemoryMB",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "palette": "orangeRed",
+                "customColumnWidthSetting": "21ch"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 0,
+                "palette": "blue",
+                "customColumnWidthSetting": "129px"
+              }
+            }
+          ],
+          "rowLimit": 20,
+          "labelSettings": [
+            {
+              "columnId": "UserName",
+              "label": "User Name"
+            },
+            {
+              "columnId": "AvgMemoryMB",
+              "label": "Avg Memory (MB)"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Sample Count"
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top users by memory",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n| where '*' in ({HostPool}) or ResourceGroup in ({HostPool})\r\n| where CPUTimeSeconds > 0\r\n| sort by HostName, ImageName, PID, TimeGenerated asc\r\n| extend PrevCPUTime = prev(CPUTimeSeconds, 1)\r\n| extend PrevTimeGenerated = prev(TimeGenerated, 1)\r\n| extend PrevPID = prev(PID, 1)\r\n| extend PrevHostName = prev(HostName, 1)\r\n| extend PrevImageName = prev(ImageName, 1)\r\n| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName\r\n| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)\r\n| extend CPUDiff = CPUTimeSeconds - PrevCPUTime\r\n| where TimeDiffSeconds > 0 and CPUDiff >= 0\r\n| extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds\r\n| summarize TotalCPUPercentageAtTime = sum(CPUPercentage) \r\n            by UserName, HostName, TimeGenerated\r\n| summarize AvgCPUPercentage = avg(TotalCPUPercentageAtTime), \r\n            TotalSamples = count() \r\n            by UserName\r\n| top 20 by AvgCPUPercentage desc\r\n| project UserName, AvgCPUPercentage = round(AvgCPUPercentage, 2), TotalSamples\r\n| order by AvgCPUPercentage desc",
+        "size": 0,
+        "title": "Top 20 Users by Average CPU Usage",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "AvgCPUPercentage",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "orangeRed",
+                "customColumnWidthSetting": "15ch"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 0,
+                "palette": "blue",
+                "customColumnWidthSetting": "126px"
+              }
+            }
+          ],
+          "rowLimit": 20,
+          "labelSettings": [
+            {
+              "columnId": "UserName",
+              "label": "User Name"
+            },
+            {
+              "columnId": "AvgCPUPercentage",
+              "label": "Avg CPU %"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Sample Count"
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top users by cpu",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\r\n### Top Processes Analysis"
+      },
+      "name": "text - section 3"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n| where '*' in ({HostPool}) or ResourceGroup in ({HostPool})\r\n| where CPUTimeSeconds > 0\r\n| sort by HostName, ImageName, PID, TimeGenerated asc\r\n| extend PrevCPUTime = prev(CPUTimeSeconds, 1)\r\n| extend PrevTimeGenerated = prev(TimeGenerated, 1)\r\n| extend PrevPID = prev(PID, 1)\r\n| extend PrevHostName = prev(HostName, 1)\r\n| extend PrevImageName = prev(ImageName, 1)\r\n| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName\r\n| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)\r\n| extend CPUDiff = CPUTimeSeconds - PrevCPUTime\r\n| where TimeDiffSeconds > 0 and CPUDiff >= 0\r\n| extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds\r\n| summarize AvgCPUPercentage = avg(CPUPercentage), \r\n            UniqueUsers = dcount(UserName),\r\n            TotalSamples = count() \r\n            by ImageName\r\n| top 20 by AvgCPUPercentage desc\r\n| project Process = ImageName, AvgCPUPercentage = round(AvgCPUPercentage, 2), UniqueUsers, TotalSamples\r\n| order by AvgCPUPercentage desc",
+        "size": 0,
+        "title": "Top 20 Processes by Average CPU Usage",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Process",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "33ch"
+              }
+            },
+            {
+              "columnMatch": "AvgCPUPercentage",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "red",
+                "customColumnWidthSetting": "15ch"
+              }
+            },
+            {
+              "columnMatch": "UniqueUsers",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "amethyst",
+                "customColumnWidthSetting": "131px"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue",
+                "customColumnWidthSetting": "134px"
+              }
+            }
+          ],
+          "labelSettings": [
+            {
+              "columnId": "Process",
+              "label": "Process Name"
+            },
+            {
+              "columnId": "AvgCPUPercentage",
+              "label": "Avg CPU %"
+            },
+            {
+              "columnId": "UniqueUsers",
+              "label": "Unique Users"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Sample Count"
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top processes by cpu",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n| where '*' in ({HostPool}) or ResourceGroup in ({HostPool})\r\n| summarize AvgMemoryBytes = avg(MemUsageBytes), \r\n            UniqueUsers = dcount(UserName),\r\n            TotalSamples = count() \r\n            by ImageName\r\n| extend AvgMemoryMB = round(AvgMemoryBytes / 1024.0 / 1024.0, 2)\r\n| top 20 by AvgMemoryMB desc\r\n| project Process = ImageName, AvgMemoryMB, UniqueUsers, TotalSamples\r\n| order by AvgMemoryMB desc",
+        "size": 0,
+        "title": "Top 20 Processes by Average Memory Usage",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Process",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "33ch"
+              }
+            },
+            {
+              "columnMatch": "AvgMemoryMB",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 32768,
+                "palette": "orangeRed",
+                "customColumnWidthSetting": "21ch"
+              }
+            },
+            {
+              "columnMatch": "UniqueUsers",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "amethyst",
+                "customColumnWidthSetting": "124px"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue",
+                "customColumnWidthSetting": "133px"
+              }
+            }
+          ],
+          "sortBy": [
+            {
+              "itemKey": "$gen_heatmap_AvgMemoryMB_1",
+              "sortOrder": 2
+            }
+          ],
+          "labelSettings": [
+            {
+              "columnId": "Process",
+              "label": "Process Name"
+            },
+            {
+              "columnId": "AvgMemoryMB",
+              "label": "Avg Memory (MB)"
+            },
+            {
+              "columnId": "UniqueUsers",
+              "label": "Unique Users"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Sample Count"
+            }
+          ]
+        },
+        "sortBy": [
+          {
+            "itemKey": "$gen_heatmap_AvgMemoryMB_1",
+            "sortOrder": 2
+          }
+        ]
+      },
+      "customWidth": "50",
+      "name": "query - top processes by memory",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\r\n### User Activity Patterns"
+      },
+      "name": "text - section 5"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n| where '*' in ({HostPool}) or ResourceGroup in ({HostPool})\r\n| summarize DistinctDays = dcount(format_datetime(TimeGenerated, 'yyyy-MM-dd')),\r\n            DistinctHosts = dcount(HostName),\r\n            TotalRecords = count(),\r\n            FirstSeen = min(TimeGenerated),\r\n            LastSeen = max(TimeGenerated)\r\n            by UserName\r\n| extend DaysActive = datetime_diff('day', LastSeen, FirstSeen) + 1\r\n| extend ActivityFrequency = round((toreal(DistinctDays) / toreal(DaysActive)) * 100.0, 2)\r\n| top 20 by TotalRecords desc\r\n| project UserName, DistinctDays, DistinctHosts, TotalRecords, ActivityFrequency\r\n| order by ActivityFrequency desc, TotalRecords desc",
+        "size": 0,
+        "title": "Top 20 Most Active Users",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "UserName",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "31ch"
+              }
+            },
+            {
+              "columnMatch": "DistinctDays",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue",
+                "customColumnWidthSetting": "118px"
+              }
+            },
+            {
+              "columnMatch": "DistinctHosts",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "green",
+                "customColumnWidthSetting": "115px"
+              }
+            },
+            {
+              "columnMatch": "TotalRecords",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "orange",
+                "customColumnWidthSetting": "129px"
+              }
+            },
+            {
+              "columnMatch": "ActivityFrequency",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "amethyst",
+                "customColumnWidthSetting": "19ch"
+              },
+              "numberFormat": {
+                "unit": 1,
+                "options": {
+                  "style": "decimal",
+                  "maximumFractionDigits": 2
+                }
+              }
+            }
+          ],
+          "labelSettings": [
+            {
+              "columnId": "UserName",
+              "label": "User Name"
+            },
+            {
+              "columnId": "DistinctDays",
+              "label": "Days Active"
+            },
+            {
+              "columnId": "DistinctHosts",
+              "label": "Hosts Used"
+            },
+            {
+              "columnId": "TotalRecords",
+              "label": "Total Minutes"
+            },
+            {
+              "columnId": "ActivityFrequency",
+              "label": "Days Active %"
+            }
+          ]
+        }
+      },
+      "name": "query - user activity",
+      "styleSettings": {
+        "showBorder": true
+      }
+    }
+  ],
+  "fallbackResourceIds": [
+    "Azure Monitor"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
