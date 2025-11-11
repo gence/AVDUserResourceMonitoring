@@ -55,8 +55,7 @@ if (Test-Path $scriptPath) {
     exit 1
 }
 
-
-Set-AzVMCustomScriptExtension -ResourceGroupName "Apps" `
+Set-AzVMCustomScriptExtension -ResourceGroupName $ResourceGroupName `
     -VMName $VMName `
     -Location $Location `
     -FileUri $uploadedFiles `

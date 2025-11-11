@@ -6,7 +6,7 @@
       "content": {
         "version": "KqlParameterItem/1.0",
         "crossComponentResources": [
-          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
         ],
         "parameters": [
           {
@@ -76,7 +76,7 @@
             "delimiter": ",",
             "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| extend ResourceGroup = tostring(split(_ResourceId, '/')[4])\r\n| where isnotempty(ResourceGroup)\r\n| summarize by ResourceGroup\r\n| order by ResourceGroup asc",
             "crossComponentResources": [
-              "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+              "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
             ],
             "typeSettings": {
               "additionalResourceOptions": [
@@ -120,7 +120,7 @@
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
-          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
         ],
         "visualization": "tiles",
         "gridSettings": {
@@ -294,7 +294,7 @@
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
-          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
         ],
         "visualization": "table",
         "gridSettings": {
@@ -359,7 +359,7 @@
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
-          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
         ],
         "visualization": "table",
         "gridSettings": {
@@ -425,7 +425,7 @@
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
-          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
         ],
         "visualization": "table",
         "gridSettings": {
@@ -501,7 +501,7 @@
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
-          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
         ],
         "visualization": "table",
         "gridSettings": {
@@ -596,7 +596,7 @@
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
-          "/subscriptions/64c33c7f-c11e-4e34-92eb-373606b040fc/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/apps-law"
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
         ],
         "visualization": "table",
         "gridSettings": {
