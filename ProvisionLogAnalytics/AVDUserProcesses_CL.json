@@ -1,0 +1,11 @@
+{
+  "TimeGenerated": "Datetime",
+  "HostName": "String",
+  "ImageName": "String",
+  "PID": "Int",
+  "UserName": "String",
+  "SessionName": "String",
+  "SessionId": "Int",
+  "MemUsageBytes": "Long",
+  "CPUTimeSeconds": "Long"
+}

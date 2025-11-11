@@ -114,7 +114,7 @@
                       "settings": {
                         "fileUris": [
                           "[variables('scriptUri')]",
-                          "[concat(variables('baseUri'), 'tasklist.ps1')]",
+                          "[concat(variables('baseUri'), 'processes.ps1')]",
                           "[concat(variables('baseUri'), 'sessions.ps1')]",
                           "[concat(variables('baseUri'), 'cleanup.ps1')]",
                           "[concat(variables('baseUri'), 'setup-tasks.bat')]",

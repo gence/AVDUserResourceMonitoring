@@ -1,0 +1,750 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "crossComponentResources": [
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+        ],
+        "parameters": [
+          {
+            "id": "b859a45e-162c-4c0e-8f24-27b0a0e9f7e0",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 604800000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 172800000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 1209600000
+                },
+                {
+                  "durationMs": 2419200000
+                },
+                {
+                  "durationMs": 2592000000
+                },
+                {
+                  "durationMs": 5184000000
+                },
+                {
+                  "durationMs": 7776000000
+                }
+              ],
+              "allowCustom": true
+            },
+            "timeContext": {
+              "durationMs": 86400000
+            },
+            "label": "Time Range"
+          },
+          {
+            "id": "4f5cc9a7-2723-4b62-b8c2-40131d80e72d",
+            "version": "KqlParameterItem/1.0",
+            "name": "User",
+            "type": 2,
+            "isRequired": true,
+            "query": "AVDUserProcesses_CL\r\n| summarize by UserName",
+            "crossComponentResources": [
+              "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": []
+            },
+            "timeContext": {
+              "durationMs": 2592000000
+            },
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "value": "gsxsecondvm\\gsoysal"
+          },
+          {
+            "id": "b513ca73-27c8-40e7-8da9-0ba639ed37c4",
+            "version": "KqlParameterItem/1.0",
+            "name": "HostName",
+            "label": "Host Name",
+            "type": 2,
+            "isRequired": true,
+            "query": "AVDUserProcesses_CL\r\n| where UserName == @'{User}'\r\n| summarize by HostName\r\n| union (print HostName = \"All\")\r\n| extend SortOrder = iff(HostName == \"All\", 0, 1)\r\n| sort by SortOrder asc, HostName asc\r\n| project HostName",
+            "crossComponentResources": [
+              "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [],
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 604800000
+            },
+            "timeContextFromParameter": "TimeRange",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "value": "gsxsecondvm"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters - time range"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\r\n### Resource Consumption"
+      },
+      "name": "text - section 2"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| where UserName == @'{User}'\r\n| where @'{HostName}' == \"All\" or HostName in (split('{HostName}', \",\"))\r\n| summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) \r\n            by TimeGenerated\r\n| extend HourBucket = bin(TimeGenerated, 1h)\r\n| summarize HourlyAvgMemoryBytes = avg(TotalMemoryBytesAtTime),\r\n            HourlyMaxMemoryBytes = max(TotalMemoryBytesAtTime),\r\n            HourlyMinMemoryBytes = min(TotalMemoryBytesAtTime)\r\n            by HourBucket\r\n| extend HourlyAvgMemoryMB = round(HourlyAvgMemoryBytes / 1024.0 / 1024.0, 2)\r\n| extend HourlyMaxMemoryMB = round(HourlyMaxMemoryBytes / 1024.0 / 1024.0, 2)\r\n| extend HourlyMinMemoryMB = round(HourlyMinMemoryBytes / 1024.0 / 1024.0, 2)\r\n| project DateTime = HourBucket,\r\n          HourlyAvgMemoryMB,\r\n          HourlyMaxMemoryMB\r\n| sort by DateTime asc\r\n| render timechart",
+        "size": 0,
+        "aggregation": 3,
+        "title": "Memory Usage Trend",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+        ],
+        "visualization": "timechart",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "UserName",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "29ch"
+              }
+            },
+            {
+              "columnMatch": "AvgMemoryMB",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "palette": "orangeRed",
+                "customColumnWidthSetting": "21ch"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 0,
+                "palette": "blue",
+                "customColumnWidthSetting": "129px"
+              }
+            }
+          ],
+          "rowLimit": 20
+        },
+        "chartSettings": {
+          "xAxis": "DateTime",
+          "yAxis": [
+            "HourlyAvgMemoryMB",
+            "HourlyMaxMemoryMB"
+          ],
+          "seriesLabelSettings": [
+            {
+              "seriesName": "HourlyAvgMemoryMB",
+              "label": "Avg Memory Usage"
+            },
+            {
+              "seriesName": "HourlyMaxMemoryMB",
+              "label": "Max Memory Usage"
+            }
+          ],
+          "xSettings": {
+            "label": ""
+          },
+          "ySettings": {
+            "numberFormatSettings": {
+              "unit": 38,
+              "options": {
+                "style": "decimal",
+                "useGrouping": true,
+                "maximumFractionDigits": 2
+              }
+            },
+            "label": "MB"
+          }
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top users by memory",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| where UserName == @'{User}'\r\n| where @'{HostName}' == \"All\" or HostName in (split('{HostName}', \",\"))\r\n| where CPUTimeSeconds > 0\r\n| sort by HostName, ImageName, PID, TimeGenerated asc\r\n| extend PrevCPUTime = prev(CPUTimeSeconds, 1)\r\n| extend PrevTimeGenerated = prev(TimeGenerated, 1)\r\n| extend PrevPID = prev(PID, 1)\r\n| extend PrevHostName = prev(HostName, 1)\r\n| extend PrevImageName = prev(ImageName, 1)\r\n| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName\r\n| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)\r\n| extend CPUDiff = CPUTimeSeconds - PrevCPUTime\r\n| where TimeDiffSeconds > 0 and CPUDiff >= 0\r\n| extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds\r\n| summarize TotalCPUPercentageAtTime = sum(CPUPercentage) \r\n            by TimeGenerated\r\n| extend HourBucket = bin(TimeGenerated, 1h)\r\n| summarize HourlyAvgCPUPercentage = avg(TotalCPUPercentageAtTime),\r\n            HourlyMaxCPUPercentage = max(TotalCPUPercentageAtTime)\r\n            by HourBucket\r\n| extend HourlyAvgCPUPct = round(HourlyAvgCPUPercentage, 2)\r\n| extend HourlyMaxCPUPct = round(HourlyMaxCPUPercentage, 2)\r\n| project DateTime = HourBucket,\r\n          HourlyAvgCPUPct,\r\n          HourlyMaxCPUPct\r\n| sort by DateTime asc\r\n| render timechart",
+        "size": 0,
+        "aggregation": 3,
+        "title": "CPU Usage Trend",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+        ],
+        "visualization": "timechart",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "AvgCPUPercentage",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "orangeRed",
+                "customColumnWidthSetting": "15ch"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "min": 0,
+                "palette": "blue",
+                "customColumnWidthSetting": "126px"
+              }
+            }
+          ],
+          "rowLimit": 20,
+          "labelSettings": [
+            {
+              "columnId": "UserName",
+              "label": "User Name"
+            },
+            {
+              "columnId": "AvgCPUPercentage",
+              "label": "Avg CPU %"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Sample Count"
+            }
+          ]
+        },
+        "chartSettings": {
+          "seriesLabelSettings": [
+            {
+              "seriesName": "HourlyAvgCPUPct",
+              "label": "Avg CPU Usage"
+            },
+            {
+              "seriesName": "HourlyMaxCPUPct",
+              "label": "Max CPU Usage"
+            }
+          ],
+          "ySettings": {
+            "numberFormatSettings": {
+              "unit": 1,
+              "options": {
+                "style": "decimal",
+                "useGrouping": true,
+                "maximumFractionDigits": 2
+              }
+            }
+          }
+        }
+      },
+      "customWidth": "50",
+      "name": "CPU Usage Trend",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\r\n### Top Processes Analysis"
+      },
+      "name": "text - section 3"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| where UserName == @'{User}'\r\n| where @'{HostName}' == \"All\" or HostName in (split('{HostName}', \",\"))\r\n| summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) \r\n            by ImageName, TimeGenerated\r\n| extend DayBucket = bin(TimeGenerated, 1d)\r\n| summarize DailyAvgMemoryBytes = avg(TotalMemoryBytesAtTime)\r\n            by ImageName, DayBucket\r\n| extend DailyAvgMemoryMB = round(DailyAvgMemoryBytes / 1024.0 / 1024.0, 2)\r\n| project DateTime = DayBucket,\r\n          ImageName,\r\n          DailyAvgMemoryMB\r\n| sort by DateTime asc, DailyAvgMemoryMB desc\r\n",
+        "size": 3,
+        "title": "Memory Usage By Process Trend - Daily",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+        ],
+        "visualization": "categoricalbar",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Process",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "33ch"
+              }
+            },
+            {
+              "columnMatch": "AvgCPUPercentage",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "red",
+                "customColumnWidthSetting": "15ch"
+              }
+            },
+            {
+              "columnMatch": "UniqueUsers",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "amethyst",
+                "customColumnWidthSetting": "131px"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue",
+                "customColumnWidthSetting": "134px"
+              }
+            }
+          ],
+          "labelSettings": [
+            {
+              "columnId": "Process",
+              "label": "Process Name"
+            },
+            {
+              "columnId": "AvgCPUPercentage",
+              "label": "Avg CPU %"
+            },
+            {
+              "columnId": "UniqueUsers",
+              "label": "Unique Users"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Sample Count"
+            }
+          ]
+        },
+        "tileSettings": {
+          "showBorder": false,
+          "titleContent": {
+            "columnMatch": "ImageName",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "DailyAvgMemoryMB",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "auto"
+            },
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "maximumSignificantDigits": 3,
+                "maximumFractionDigits": 2
+              }
+            }
+          }
+        },
+        "graphSettings": {
+          "type": 0,
+          "topContent": {
+            "columnMatch": "ImageName",
+            "formatter": 1
+          },
+          "centerContent": {
+            "columnMatch": "DailyAvgMemoryMB",
+            "formatter": 1,
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "maximumSignificantDigits": 3,
+                "maximumFractionDigits": 2
+              }
+            }
+          }
+        },
+        "chartSettings": {
+          "xAxis": "DateTime",
+          "yAxis": [
+            "DailyAvgMemoryMB"
+          ],
+          "group": "ImageName",
+          "createOtherGroup": 10,
+          "seriesLabelSettings": [
+            {
+              "seriesName": "HourlyAvgMemoryMB",
+              "label": "Avg Memory Use"
+            }
+          ],
+          "xSettings": {
+            "dateFormatSettings": {
+              "formatName": "shortDatePattern",
+              "showUtcTime": false
+            },
+            "scale": "time"
+          },
+          "ySettings": {
+            "numberFormatSettings": {
+              "unit": 38,
+              "options": {
+                "style": "decimal",
+                "useGrouping": true
+              }
+            }
+          }
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top processes by RAM - Day",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| where UserName == @'{User}'\r\n| where @'{HostName}' == \"All\" or HostName in (split('{HostName}', \",\"))\r\n| sort by HostName, ImageName, PID, TimeGenerated asc\r\n| extend PrevCPUTime = prev(CPUTimeSeconds, 1)\r\n| extend PrevTimeGenerated = prev(TimeGenerated, 1)\r\n| extend PrevPID = prev(PID, 1)\r\n| extend PrevHostName = prev(HostName, 1)\r\n| extend PrevImageName = prev(ImageName, 1)\r\n| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName\r\n| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)\r\n| extend CPUDiff = CPUTimeSeconds - PrevCPUTime\r\n| where TimeDiffSeconds > 0 and CPUDiff >= 0\r\n| summarize TotalCPUDiff = sum(CPUDiff), TimeDiffSeconds = any(TimeDiffSeconds)\r\n            by ImageName, TimeGenerated\r\n| where TotalCPUDiff > 0\r\n| extend TotalCPUPercentageAtTime = (TotalCPUDiff * 100.0) / TimeDiffSeconds\r\n| extend DayBucket = bin(TimeGenerated, 1d)\r\n| summarize DailyMaxCPUPercentage = max(TotalCPUPercentageAtTime),\r\n            DailyAvgCPUPercentage = avg(TotalCPUPercentageAtTime)\r\n            by ImageName, DayBucket\r\n| extend DailyAvgCPUPct = round(DailyAvgCPUPercentage, 2),\r\n         DailyMaxCPUPct = round(DailyMaxCPUPercentage, 2)\r\n| project DateTime = DayBucket,\r\n          ImageName,\r\n          DailyAvgCPUPct,\r\n          DailyMaxCPUPct\r\n| sort by DateTime asc, DailyMaxCPUPct desc",
+        "size": 3,
+        "title": "CPU Usage By Process Trend - Daily",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+        ],
+        "visualization": "categoricalbar",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Process",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "33ch"
+              }
+            },
+            {
+              "columnMatch": "AvgCPUPercentage",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "red",
+                "customColumnWidthSetting": "15ch"
+              }
+            },
+            {
+              "columnMatch": "UniqueUsers",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "amethyst",
+                "customColumnWidthSetting": "131px"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue",
+                "customColumnWidthSetting": "134px"
+              }
+            }
+          ],
+          "labelSettings": [
+            {
+              "columnId": "Process",
+              "label": "Process Name"
+            },
+            {
+              "columnId": "AvgCPUPercentage",
+              "label": "Avg CPU %"
+            },
+            {
+              "columnId": "UniqueUsers",
+              "label": "Unique Users"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Sample Count"
+            }
+          ]
+        },
+        "chartSettings": {
+          "xAxis": "DateTime",
+          "yAxis": [
+            "DailyMaxCPUPct"
+          ],
+          "group": "ImageName",
+          "createOtherGroup": 10,
+          "seriesLabelSettings": [
+            {
+              "seriesName": "HourlyAvgMemoryMB",
+              "label": "Avg Memory Use"
+            }
+          ],
+          "xSettings": {
+            "dateFormatSettings": {
+              "formatName": "shortDatePattern",
+              "showUtcTime": false
+            },
+            "scale": "time"
+          },
+          "ySettings": {
+            "numberFormatSettings": {
+              "unit": 1,
+              "options": {
+                "style": "decimal",
+                "useGrouping": true,
+                "maximumFractionDigits": 2
+              }
+            }
+          }
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top processes by cpu - Daily",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| where UserName == @'{User}'\r\n| where @'{HostName}' == \"All\" or HostName in (split('{HostName}', \",\"))\r\n| summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) \r\n            by ImageName, TimeGenerated\r\n| extend HourBucket = bin(TimeGenerated, 1h)\r\n| summarize HourlyAvgMemoryBytes = avg(TotalMemoryBytesAtTime)\r\n            by ImageName, HourBucket\r\n| extend HourlyAvgMemoryMB = round(HourlyAvgMemoryBytes / 1024.0 / 1024.0, 2)\r\n| project DateTime = HourBucket,\r\n          ImageName,\r\n          HourlyAvgMemoryMB\r\n| sort by DateTime asc, HourlyAvgMemoryMB desc\r\n",
+        "size": 3,
+        "title": "Memory Usage By Process Trend - Hourly",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+        ],
+        "visualization": "categoricalbar",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Process",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "33ch"
+              }
+            },
+            {
+              "columnMatch": "AvgCPUPercentage",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "red",
+                "customColumnWidthSetting": "15ch"
+              }
+            },
+            {
+              "columnMatch": "UniqueUsers",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "amethyst",
+                "customColumnWidthSetting": "131px"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue",
+                "customColumnWidthSetting": "134px"
+              }
+            }
+          ],
+          "labelSettings": [
+            {
+              "columnId": "Process",
+              "label": "Process Name"
+            },
+            {
+              "columnId": "AvgCPUPercentage",
+              "label": "Avg CPU %"
+            },
+            {
+              "columnId": "UniqueUsers",
+              "label": "Unique Users"
+            },
+            {
+              "columnId": "TotalSamples",
+              "label": "Sample Count"
+            }
+          ]
+        },
+        "chartSettings": {
+          "xAxis": "DateTime",
+          "yAxis": [
+            "HourlyAvgMemoryMB"
+          ],
+          "group": "ImageName",
+          "createOtherGroup": null,
+          "seriesLabelSettings": [
+            {
+              "seriesName": "HourlyAvgMemoryMB",
+              "label": "Avg Memory Use"
+            }
+          ],
+          "xSettings": {
+            "numberFormatSettings": {
+              "unit": 26,
+              "options": {
+                "style": "decimal",
+                "useGrouping": true
+              }
+            }
+          },
+          "ySettings": {
+            "numberFormatSettings": {
+              "unit": 38,
+              "options": {
+                "style": "decimal",
+                "useGrouping": true
+              }
+            }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "query - top processes by RAM",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AVDUserProcesses_CL\r\n| where TimeGenerated {TimeRange}\r\n| where UserName == @'{User}'\r\n| where @'{HostName}' == \"All\" or HostName in (split('{HostName}', \",\"))\r\n| sort by HostName, ImageName, PID, TimeGenerated asc\r\n| extend PrevCPUTime = prev(CPUTimeSeconds, 1)\r\n| extend PrevTimeGenerated = prev(TimeGenerated, 1)\r\n| extend PrevPID = prev(PID, 1)\r\n| extend PrevHostName = prev(HostName, 1)\r\n| extend PrevImageName = prev(ImageName, 1)\r\n| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName\r\n| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)\r\n| extend CPUDiff = CPUTimeSeconds - PrevCPUTime\r\n| where TimeDiffSeconds > 0 and CPUDiff >= 0\r\n| summarize TotalCPUDiff = sum(CPUDiff), TimeDiffSeconds = any(TimeDiffSeconds)\r\n            by ImageName, TimeGenerated\r\n| where TotalCPUDiff > 0\r\n| extend TotalCPUPercentageAtTime = (TotalCPUDiff * 100.0) / TimeDiffSeconds\r\n| extend HourBucket = bin(TimeGenerated, 1h)\r\n| summarize HourlyMaxCPUPercentage = max(TotalCPUPercentageAtTime),\r\n            HourlyAvgCPUPercentage = avg(TotalCPUPercentageAtTime)\r\n            by ImageName, HourBucket\r\n| extend HourlyAvgCPUPct = round(HourlyAvgCPUPercentage, 2),\r\n         HourlyMaxCPUPct = round(HourlyMaxCPUPercentage, 2)\r\n| project DateTime = HourBucket,\r\n          ImageName,\r\n          HourlyAvgCPUPct,\r\n          HourlyMaxCPUPct\r\n| sort by DateTime asc, HourlyMaxCPUPct desc\r\n",
+        "size": 3,
+        "title": "Max CPU Usage By Process Trend - Hourly",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}"
+        ],
+        "visualization": "categoricalbar",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Process",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "33ch"
+              }
+            },
+            {
+              "columnMatch": "AvgCPUPercentage",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "red",
+                "customColumnWidthSetting": "15ch"
+              }
+            },
+            {
+              "columnMatch": "UniqueUsers",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "amethyst",
+                "customColumnWidthSetting": "131px"
+              }
+            },
+            {
+              "columnMatch": "TotalSamples",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue",
+                "customColumnWidthSetting": "134px"
+              }
+            }
+          ]
+        },
+        "chartSettings": {
+          "xAxis": "DateTime",
+          "yAxis": [
+            "HourlyMaxCPUPct"
+          ],
+          "group": "ImageName",
+          "createOtherGroup": 10,
+          "seriesLabelSettings": [
+            {
+              "seriesName": "HourlyAvgMemoryMB",
+              "label": "Avg Memory Use"
+            }
+          ],
+          "xSettings": {
+            "dateFormatSettings": {
+              "formatName": "shortDateTimeNoMsPattern",
+              "showUtcTime": false
+            },
+            "scale": "time"
+          },
+          "ySettings": {
+            "numberFormatSettings": {
+              "unit": 1,
+              "options": {
+                "style": "decimal",
+                "useGrouping": true,
+                "maximumFractionDigits": 2
+              }
+            }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "query - top processes by cpu",
+      "styleSettings": {
+        "showBorder": true
+      }
+    }
+  ],
+  "fallbackResourceIds": [
+    "azure monitor"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

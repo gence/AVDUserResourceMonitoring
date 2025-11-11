@@ -1,5 +1,5 @@
 # PowerShell script to run tasklist command and save results with hostname and timestamp
-# Author: GitHub Copilot
+# Author: GitHub Copilot, Gence Soysal
 # Date: November 8, 2025
 
 # Get current hostname
@@ -11,16 +11,31 @@ $timestamp = Get-Date
 # Generate filename with current date and time
 $dateTimeString = Get-Date -Format "yyyyMMdd-HHmm"
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$outputFolder = Join-Path $scriptPath "tasklist"
-$outputFile = Join-Path $outputFolder "tasklist-$dateTimeString.csv"
-$logFile = Join-Path $scriptPath "tasklist.log"
+$outputFolder = Join-Path $scriptPath "AVDUserProcesses"
+$outputFile = Join-Path $outputFolder "processes-$dateTimeString.csv"
+$logFile = Join-Path $scriptPath "AVDUserProcesses.log"
 
 # Function to write both to console and log file
 function Write-Log {
-    param([string]$Message)
-    $timestampedMessage = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $Message"
-    Write-Host $Message
-    Add-Content -Path $logFile -Value $timestampedMessage -Encoding UTF8
+    param(
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "[$timestamp] [$Level] $Message"
+
+    # Write to console
+    Write-Host $logMessage
+
+    # Write to log file if defined
+    if ($logFile -and (Test-Path (Split-Path $logFile -Parent))) {
+        try {
+            $logMessage | Out-File -FilePath $logFile -Append -Encoding UTF8
+        } catch {
+            Write-Host "Warning: Could not write to log file: $_"
+        }
+    }
 }
 
 # Create output folder if it doesn't exist
@@ -29,17 +44,12 @@ if (-not (Test-Path $outputFolder)) {
         New-Item -ItemType Directory -Path $outputFolder -Force | Out-Null
         Write-Log "Created output folder: $outputFolder"
     } catch {
-        Write-Log "Error creating output folder: $_"
+        Write-Log "Error creating output folder: $_" "ERROR"
         exit 1
     }
 } else {
     Write-Log "Using existing output folder: $outputFolder"
 }
-
-# Get process information using fast Get-Process
-Write-Log "Getting process information using Get-Process..."
-
-$processedData = @()
 
 try {
     # Get all session information once and store in memory
@@ -52,18 +62,20 @@ try {
                 $sessionName = $matches[1].ToLower() -replace '#', ' ' -replace '^>', ''
                 $sessionId = [int]$matches[3]
                 $sessionInfo[$sessionId] = $sessionName
-                # Write-Log "Session mapping: ID $sessionId -> '$sessionName'"
             }
         }
     } catch {
-        Write-Log "Error getting session info: $_"
+        Write-Log "Error getting session info: $_" "ERROR"
     }
-    
-    # Use Get-Process - much faster than WMI
-    $processes = Get-Process -IncludeUserName -ErrorAction SilentlyContinue
-    
+
+    # Get process information using Get-Process
+    Write-Log "Getting process information using Get-Process..."
+    $processes = Get-Process -IncludeUserName | Where-Object { $_.SessionId -gt 0 -and $_.UserName -notmatch '^(NT AUTHORITY\\(SYSTEM|LOCAL SERVICE|NETWORK SERVICE))$' -and $_.ProcessName -notin @('fontdrvhost','dwm','csrss') } | Select-Object ProcessName, Id, SessionId, WorkingSet64, TotalProcessorTime, UserName
     Write-Log "Found $($processes.Count) total processes"
     
+    # Initialize array to hold processed data
+    $processedData = @()
+
     foreach ($process in $processes) {
         try {
             # Get basic info
@@ -80,21 +92,6 @@ try {
                 "NoUserName" 
             }
             
-            # Write-Log "Processing: $imageName (PID: $processId, Session: $sessionId, User: '$username')"
-            
-            # Only include user session processes (session > 0)
-            if ($sessionId -le 0) {
-                # Write-Log "Skipping session 0 process: $imageName"
-                continue
-            }
-            
-            # For now, include ALL session > 0 processes regardless of username to see what we get
-            # Skip system processes
-            if ($username -match "NT AUTHORITY|SYSTEM") {
-                # Write-Log "Skipping system process: $imageName ($username)"
-                continue
-            }
-            
             # Get session name from our cached session info
             $sessionName = if ($sessionInfo.ContainsKey($sessionId)) { 
                 $sessionInfo[$sessionId] 
@@ -104,17 +101,14 @@ try {
             }
             
             # Create CSV line with hostname and UTC timestamp
-            $csvLine = '' + $hostname + ',' + $timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") + ',' + $imageName + ',' + $processId + ',' + $sessionName + ',' + $sessionId + ',' + $memUsageBytes + ',' + $username + ',' + $cpuTimeSeconds
+            $csvLine = $timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") + ',' + $hostname + ',' + $imageName + ',' + $processId + ',' + $username + ',' + $sessionName + ',' + $sessionId + ',' + $memUsageBytes + ',' + $cpuTimeSeconds
             $processedData += $csvLine
-            
-            # Write-Log "Added process: $imageName"
             
         } catch {
             Write-Log "Error processing process $($process.ProcessName): $_"
             continue
         }
     }
-    
 } catch {
     Write-Log "Error getting process information: $_"
     exit 1
@@ -129,7 +123,10 @@ Write-Log "Saving CSV results to $outputFile..."
 #Write-Log "Full output path: $outputFile"
 
 try {
-    $processedData | Out-File -FilePath $outputFile -Encoding UTF8
+    # Use New-Item with -Value to create file without BOM
+    # Use Windows-standard CRLF line endings for better AMA compatibility
+    $csvContent = $processedData -join "`r`n"
+    New-Item -Path $outputFile -ItemType File -Value $csvContent -Force | Out-Null
     Write-Log "Task completed successfully!"
     Write-Log "CSV output saved to: $outputFile"
     Write-Log "Total processes found: $($processedData.Count)"

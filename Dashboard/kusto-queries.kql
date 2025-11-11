@@ -239,14 +239,204 @@ AVDUserProcesses_CL
 | project UserName, ImageName, PID, HostName, LifetimeMinutes, ObservationCount, FirstSeen, LastSeen
 | order by LifetimeMinutes desc
 
+// ------------------------------------------------------------------------------
+// Query 11: Single User Daily Resource Usage Trend (Perfect for Time Series Charts)
+// ------------------------------------------------------------------------------
+// Shows memory and CPU usage for a specified user over X days, with each day as a separate line
+// Replace 'SPECIFY_USERNAME' with the actual username and adjust the time range as needed
+let SpecifiedUser = "SPECIFY_USERNAME";  // Change this to the target username
+let DaysToAnalyze = 30;  // Change this to the number of days to analyze
+// Memory usage by day
+let DailyMemoryUsage = AVDUserProcesses_CL
+    | where TimeGenerated > ago(DaysToAnalyze * 1d)
+    | where UserName == SpecifiedUser
+    | summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) 
+                by UserName, HostName, TimeGenerated
+    | extend DateOnly = format_datetime(TimeGenerated, 'yyyy-MM-dd')
+    | summarize DailyAvgMemoryBytes = avg(TotalMemoryBytesAtTime),
+                DailyMaxMemoryBytes = max(TotalMemoryBytesAtTime),
+                DailyMinMemoryBytes = min(TotalMemoryBytesAtTime),
+                DataPoints = count()
+                by DateOnly
+    | extend DailyAvgMemoryMB = round(DailyAvgMemoryBytes / 1024.0 / 1024.0, 2)
+    | extend DailyMaxMemoryMB = round(DailyMaxMemoryBytes / 1024.0 / 1024.0, 2)
+    | extend DailyMinMemoryMB = round(DailyMinMemoryBytes / 1024.0 / 1024.0, 2);
+// CPU usage by day
+let DailyCPUUsage = AVDUserProcesses_CL
+    | where TimeGenerated > ago(DaysToAnalyze * 1d)
+    | where UserName == SpecifiedUser
+    | where CPUTimeSeconds > 0
+    | sort by HostName, ImageName, PID, TimeGenerated asc
+    | extend PrevCPUTime = prev(CPUTimeSeconds, 1)
+    | extend PrevTimeGenerated = prev(TimeGenerated, 1)
+    | extend PrevPID = prev(PID, 1)
+    | extend PrevHostName = prev(HostName, 1)
+    | extend PrevImageName = prev(ImageName, 1)
+    | where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName
+    | extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)
+    | extend CPUDiff = CPUTimeSeconds - PrevCPUTime
+    | where TimeDiffSeconds > 0 and CPUDiff >= 0
+    | extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds
+    | summarize TotalCPUPercentageAtTime = sum(CPUPercentage) 
+                by UserName, HostName, TimeGenerated
+    | extend DateOnly = format_datetime(TimeGenerated, 'yyyy-MM-dd')
+    | summarize DailyAvgCPUPercentage = avg(TotalCPUPercentageAtTime),
+                DailyMaxCPUPercentage = max(TotalCPUPercentageAtTime),
+                DailyMinCPUPercentage = min(TotalCPUPercentageAtTime),
+                CPUDataPoints = count()
+                by DateOnly
+    | extend DailyAvgCPUPct = round(DailyAvgCPUPercentage, 2)
+    | extend DailyMaxCPUPct = round(DailyMaxCPUPercentage, 2)
+    | extend DailyMinCPUPct = round(DailyMinCPUPercentage, 2);
+// Combine memory and CPU data for comprehensive daily view
+DailyMemoryUsage
+| join kind=fullouter (DailyCPUUsage) on DateOnly
+| extend Date = coalesce(DateOnly, DateOnly1)
+| project Date,
+          AvgMemoryMB = coalesce(DailyAvgMemoryMB, 0.0),
+          MaxMemoryMB = coalesce(DailyMaxMemoryMB, 0.0),
+          MinMemoryMB = coalesce(DailyMinMemoryMB, 0.0),
+          AvgCPUPct = coalesce(DailyAvgCPUPct, 0.0),
+          MaxCPUPct = coalesce(DailyMaxCPUPct, 0.0),
+          MinCPUPct = coalesce(DailyMinCPUPct, 0.0),
+          MemoryDataPoints = coalesce(DataPoints, 0),
+          CPUDataPoints = coalesce(CPUDataPoints, 0)
+| extend DateTime = todatetime(Date)
+| sort by DateTime asc
+| project Date, 
+          DateTime,
+          AvgMemoryMB, 
+          MaxMemoryMB, 
+          MinMemoryMB,
+          AvgCPUPct, 
+          MaxCPUPct, 
+          MinCPUPct,
+          MemoryDataPoints,
+          CPUDataPoints
+
+// ------------------------------------------------------------------------------
+// Query 12: Single User Hourly Resource Usage - Memory
+// ------------------------------------------------------------------------------
+// Shows memory usage for a specified user by hour over a certain time period
+// Replace 'SPECIFY_USERNAME' with the actual username and adjust the time range as needed
+let SpecifiedUser = "";  // Change this to the target username
+AVDUserProcesses_CL
+| where UserName == SpecifiedUser
+| summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) 
+            by TimeGenerated
+| extend HourBucket = bin(TimeGenerated, 1h)
+| summarize HourlyAvgMemoryBytes = avg(TotalMemoryBytesAtTime),
+            HourlyMaxMemoryBytes = max(TotalMemoryBytesAtTime),
+            HourlyMinMemoryBytes = min(TotalMemoryBytesAtTime),
+            by HourBucket
+| extend HourlyAvgMemoryMB = round(HourlyAvgMemoryBytes / 1024.0 / 1024.0, 2)
+| extend HourlyMaxMemoryMB = round(HourlyMaxMemoryBytes / 1024.0 / 1024.0, 2)
+| extend HourlyMinMemoryMB = round(HourlyMinMemoryBytes / 1024.0 / 1024.0, 2)
+| project DateTime = HourBucket,
+          HourlyAvgMemoryMB,
+          HourlyMaxMemoryMB
+| sort by DateTime asc
+| render timechart
+
+// ------------------------------------------------------------------------------
+// Query 13: Single User Hourly Resource Usage - Memory per Process
+// ------------------------------------------------------------------------------
+// Shows memory usage for a specified user by hour over a certain time period
+// Replace 'SPECIFY_USERNAME' with the actual username and adjust the time range as needed
+let SpecifiedUser = "";  // Change this to the target username
+AVDUserProcesses_CL
+| where UserName == SpecifiedUser
+| summarize TotalMemoryBytesAtTime = sum(MemUsageBytes) 
+            by ImageName, TimeGenerated
+| extend HourBucket = bin(TimeGenerated, 1h)
+| summarize HourlyAvgMemoryBytes = avg(TotalMemoryBytesAtTime)
+            by ImageName, HourBucket
+| extend HourlyAvgMemoryMB = round(HourlyAvgMemoryBytes / 1024.0 / 1024.0, 2)
+| project DateTime = HourBucket,
+          ImageName,
+          HourlyAvgMemoryMB
+| sort by DateTime asc
+| render columnchart
+
+// ------------------------------------------------------------------------------
+// Query 14: Single User Hourly Resource Usage - CPU
+// ------------------------------------------------------------------------------
+// Shows CPU usage for a specified user by hour over a certain time period
+// Replace 'SPECIFY_USERNAME' with the actual username and adjust the time range as needed
+let SpecifiedUser = "";  // Change this to the target username
+AVDUserProcesses_CL
+| where UserName == SpecifiedUser
+| where CPUTimeSeconds > 0
+| sort by HostName, ImageName, PID, TimeGenerated asc
+| extend PrevCPUTime = prev(CPUTimeSeconds, 1)
+| extend PrevTimeGenerated = prev(TimeGenerated, 1)
+| extend PrevPID = prev(PID, 1)
+| extend PrevHostName = prev(HostName, 1)
+| extend PrevImageName = prev(ImageName, 1)
+| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName
+| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)
+| extend CPUDiff = CPUTimeSeconds - PrevCPUTime
+| where TimeDiffSeconds > 0 and CPUDiff >= 0
+| extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds
+| summarize TotalCPUPercentageAtTime = sum(CPUPercentage) 
+            by TimeGenerated
+| extend HourBucket = bin(TimeGenerated, 1h)
+| summarize HourlyAvgCPUPercentage = avg(TotalCPUPercentageAtTime),
+            HourlyMaxCPUPercentage = max(TotalCPUPercentageAtTime),
+            HourlyMinCPUPercentage = min(TotalCPUPercentageAtTime)
+            by HourBucket
+| extend HourlyAvgCPUPct = round(HourlyAvgCPUPercentage, 2)
+| extend HourlyMaxCPUPct = round(HourlyMaxCPUPercentage, 2)
+| extend HourlyMinCPUPct = round(HourlyMinCPUPercentage, 2)
+| project DateTime = HourBucket,
+          HourlyAvgCPUPct,
+          HourlyMaxCPUPct,
+          HourlyMinCPUPct
+| sort by DateTime asc
+| render timechart
+
+// ------------------------------------------------------------------------------
+// Query 15: Single User Hourly Resource Usage - CPU per Process
+// ------------------------------------------------------------------------------
+// Shows CPU usage for a specified user by hour per process over a certain time period
+// Replace 'SPECIFY_USERNAME' with the actual username and adjust the time range as needed
+let SpecifiedUser = "";  // Change this to the target username
+AVDUserProcesses_CL
+| where UserName == SpecifiedUser
+| sort by HostName, ImageName, PID, TimeGenerated asc
+| extend PrevCPUTime = prev(CPUTimeSeconds, 1)
+| extend PrevTimeGenerated = prev(TimeGenerated, 1)
+| extend PrevPID = prev(PID, 1)
+| extend PrevHostName = prev(HostName, 1)
+| extend PrevImageName = prev(ImageName, 1)
+| where PID == PrevPID and HostName == PrevHostName and ImageName == PrevImageName
+| extend TimeDiffSeconds = datetime_diff('second', TimeGenerated, PrevTimeGenerated)
+| extend CPUDiff = CPUTimeSeconds - PrevCPUTime
+| where TimeDiffSeconds > 0 and CPUDiff >= 0
+| extend CPUPercentage = (CPUDiff * 100.0) / TimeDiffSeconds
+| summarize TotalCPUPercentageAtTime = sum(CPUPercentage) 
+            by ImageName, TimeGenerated
+| extend HourBucket = bin(TimeGenerated, 1h)
+| summarize HourlyAvgCPUPercentage = avg(TotalCPUPercentageAtTime)
+            by ImageName, HourBucket
+| extend HourlyAvgCPUPct = round(HourlyAvgCPUPercentage, 2)
+| project DateTime = HourBucket,
+          ImageName,
+          HourlyAvgCPUPct
+| sort by DateTime asc
+| render columnchart
+
 // ==============================================================================
 // NOTES ON USAGE:
 // ==============================================================================
-// 1. Table name: AVDUserProcesses_CL
+// 1. Table name: AVDUserProcesses_CL (update to AVDUserProcesses3_CL if using newer schema)
 // 2. Adjust the system account filters as needed for your environment
 // 3. CPU calculations assume the cumulative counter is in centiseconds (common format)
 //    If your counter is in different units, adjust the CPUPercentage calculation
 // 4. The top N limits (20, 10, 25, 50) can be adjusted based on your needs
 // 5. For time-based analysis, add "| where TimeGenerated > ago(7d)" to filter date ranges
 // 6. Resource Score weights (0.5 CPU, 0.5 Memory) can be adjusted based on priorities
+// 7. For Query 11 & 12: Replace 'SPECIFY_USERNAME' with actual username (e.g., "john.doe")
+// 8. Query 11 is perfect for creating time series line charts in Azure Workbooks/Power BI
+// 9. Query 12 provides hourly granularity for detailed intraday patterns
 // ==============================================================================

@@ -1,8 +1,21 @@
 # PowerShell script to run query user command and save results with hostname and timestamp
-# Author: GitHub Copilot
+# Author: GitHub Copilot, Gence Soysal
 # Date: November 8, 2025
 
-# Function to write log messages to both console and file
+# Get current hostname
+$hostname = $env:COMPUTERNAME
+
+# Get current timestamp
+$timestamp = Get-Date
+
+# Generate filename with current date and time
+$dateTimeString = Get-Date -Format "yyyyMMdd-HHmm"
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+$outputFolder = Join-Path $scriptPath "AVDUserSessions"
+$outputFile = Join-Path $outputFolder "sessions-$dateTimeString.csv"
+$logFile = Join-Path $scriptPath "AVDUserSessions.log"
+
+# Function to write both to console and log file
 function Write-Log {
     param(
         [string]$Message,
@@ -16,29 +29,14 @@ function Write-Log {
     Write-Host $logMessage
     
     # Write to log file if defined
-    if ($script:logFile -and (Test-Path (Split-Path $script:logFile -Parent))) {
+    if ($logFile -and (Test-Path (Split-Path $logFile -Parent))) {
         try {
-            $logMessage | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+            $logMessage | Out-File -FilePath $logFile -Append -Encoding UTF8
         } catch {
             Write-Host "Warning: Could not write to log file: $_"
         }
     }
 }
-
-# Get current hostname
-$hostname = $env:COMPUTERNAME
-
-# Get current timestamp
-$timestamp = Get-Date
-
-# Generate filename with current date and time
-$dateTimeString = Get-Date -Format "yyyyMMdd-HHmm"
-$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$outputFolder = Join-Path $scriptPath "sessions"
-$outputFile = Join-Path $outputFolder "sessions-$dateTimeString.csv"
-
-# Set up log file
-$script:logFile = Join-Path $scriptPath "sessions.log"
 
 # Create output folder if it doesn't exist
 if (-not (Test-Path $outputFolder)) {
@@ -53,23 +51,15 @@ if (-not (Test-Path $outputFolder)) {
     Write-Log "Using existing output folder: $outputFolder"
 }
 
-# Start logging
-Write-Log "Starting session monitoring script"
-Write-Log "Hostname: $hostname"
-Write-Log "Output folder: $outputFolder"
-Write-Log "Output file: $outputFile"
-
 # Run query user command and capture output
 Write-Log "Running query user command..."
+
 try {
     $queryUserOutput = query user 2>&1
 } catch {
     Write-Log "Error running query user command: $_" "ERROR"
     exit 1
 }
-
-# Process each line and add hostname and timestamp
-Write-Log "Processing output and adding hostname and timestamp..."
 
 $processedData = @()
 $lines = $queryUserOutput -split "`n"
@@ -112,7 +102,7 @@ foreach ($line in $lines) {
                 }
                 
                 # Create CSV line with hostname and UTC timestamp
-                $csvLine = $hostname + ',' + $timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") + ',' + $username + ',' + $sessionName + ',' + $sessionId + ',' + $state + ',' + $idleTime + ',' + $logonTimeUtc
+                $csvLine = $timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") + ',' + $hostname + ',' + $username + ',' + $sessionName + ',' + $sessionId + ',' + $state + ',' + $idleTime + ',' + $logonTimeUtc
                 $processedData += $csvLine
             } elseif ($line -match '^\s*(\S+)\s+(\d+)\s+(\S+)\s+(\S*)\s+(.*)$') {
                 # Handle disconnected sessions (no session name)
@@ -133,7 +123,7 @@ foreach ($line in $lines) {
                 }
                 
                 # Create CSV line with hostname and UTC timestamp
-                $csvLine = $hostname + ',' + $timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") + ',' + $username + ',' + $sessionName + ',' + $sessionId + ',' + $state + ',' + $idleTime + ',' + $logonTimeUtc
+                $csvLine = $timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") + ',' + $hostname + ',' + $username + ',' + $sessionName + ',' + $sessionId + ',' + $state + ',' + $idleTime + ',' + $logonTimeUtc
                 $processedData += $csvLine
             }
         }
@@ -147,7 +137,10 @@ Write-Log "Saving CSV results to $outputFile..."
 #Write-Log "Full output path: $outputFile"
 
 try {
-    $processedData | Out-File -FilePath $outputFile -Encoding UTF8
+    # Use New-Item with -Value to create file without BOM
+    # Use Windows-standard CRLF line endings for better AMA compatibility
+    $csvContent = $processedData -join "`r`n"
+    New-Item -Path $outputFile -ItemType File -Value $csvContent -Force | Out-Null
     Write-Log "Task completed successfully!"
     Write-Log "CSV output saved to: $outputFile"
     Write-Log "Total sessions found: $($processedData.Count)"

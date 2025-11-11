@@ -1,0 +1,10 @@
+﻿{
+	"TimeGenerated":  "Datetime",
+	"HostName":  "String",
+	"UserName":  "String",
+	"SessionName":  "String",
+	"SessionID":  "Int",
+	"SessionState":  "String",
+	"IdleTime":  "String",
+	"LogonTime":  "Datetime"
+}

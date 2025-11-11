@@ -1,32 +1,31 @@
-# Azure VM Monitoring Deployment Script
+# Script to Deploy AVDSessionWatch monitoring solution to Azure VMs
 # Author: GitHub Copilot
 # Date: November 8, 2025
-# Purpose: Deploy AVDSessionWatch monitoring solution to Azure VMs
 
 param(
     [Parameter(Mandatory=$false)]
     [string[]]$VMNames,
     
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
+    [string]$SubscriptionId,
+
+    [Parameter(Mandatory=$false)]
     [string]$ResourceGroupName,
     
-    [Parameter(Mandatory=$false)]
-    [string]$StorageAccountName = "",
+    [Parameter(Mandatory=$true)]
+    [string]$StorageAccountName,
 
     [Parameter(Mandatory=$false)]
     [string]$StorageAccountKey = "",
 
     [Parameter(Mandatory=$false)]
-    [string]$ContainerName = "",
+    [string]$ContainerName = "avdsessionwatch-scripts",
     
     [Parameter(Mandatory=$false)]
     [string]$Location = "East US",
-    
+
     [Parameter(Mandatory=$false)]
-    [switch]$UseLocalFiles = $false,
-    
-    [Parameter(Mandatory=$false)]
-    [switch]$TestMode = $false
+    [string]$UploadToStorageOnly = $false
 )
 
 # Function to write deployment logs
@@ -44,11 +43,12 @@ function New-AVDSessionWatchPackage {
     
     # Define files to package
     $filesToPackage = @(
-        "tasklist.ps1",
+        "processes.ps1",
         "sessions.ps1", 
         "cleanup.ps1",
         "setup-tasks.bat",
-        "remove-tasks.bat"
+        "remove-tasks.bat",
+        "install-avdsessionwatch.ps1"
     )
     
     # Create package directory
@@ -67,91 +67,12 @@ function New-AVDSessionWatchPackage {
             Write-DeployLog "Warning: $file not found" "WARN"
         }
     }
-    
-    # Create deployment script for target VMs
-    $deployScript = @'
-# Target VM Deployment Script
-# This script runs on each target VM to set up monitoring
-
-param([string]$InstallPath = "C:\ProgramData\AVDSessionWatch")
-
-Write-Host "Starting AVDSessionWatch deployment..."
-Write-Host "Install path: $InstallPath"
-
-# Create installation directory
-if (-not (Test-Path $InstallPath)) {
-    New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
-    # Remove inherited permissions
-    icacls $InstallPath /inheritance:d
-
-    # Grant SYSTEM full control
-    icacls $InstallPath /grant 'SYSTEM:(OI)(CI)F'
-
-    # Grant Administrators full control
-    icacls $InstallPath /grant 'Administrators:(OI)(CI)F'
-
-    # Remove Users group entirely
-    icacls $InstallPath /remove 'Users'
-
-    Write-Host "Created directory: $InstallPath"
-}
-
-# Copy files from script location to install path
-$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (Test-Path $scriptPath) {
-    Write-Host "Copying files from $scriptPath to $InstallPath..."
-    Copy-Item "$scriptPath\*" -Destination $InstallPath -Force
-    Write-Host "Files copied successfully"
-} else {
-    Write-Host "Error: Script directory not found at $scriptPath"
-    exit 1
-}
-
-# Set execution policy for PowerShell scripts
-try {
-    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine -Force
-    Write-Host "Set PowerShell execution policy"
-} catch {
-    Write-Host "Warning: Could not set execution policy: $_"
-}
-
-# Run setup to create scheduled tasks
-Write-Host "Setting up scheduled tasks..."
-$setupPath = Join-Path $InstallPath "setup-tasks.bat"
-if (Test-Path $setupPath) {
-    Start-Process -FilePath $setupPath -Wait -WindowStyle Hidden
-    Write-Host "Scheduled tasks created"
-} else {
-    Write-Host "Error: setup-tasks.bat not found"
-    exit 1
-}
-
-# Create initial directories
-$tasklistDir = Join-Path $InstallPath "tasklist"
-$sessionsDir = Join-Path $InstallPath "sessions"
-
-if (-not (Test-Path $tasklistDir)) {
-    New-Item -ItemType Directory -Path $tasklistDir -Force | Out-Null
-    Write-Host "Created tasklist directory"
-}
-
-if (-not (Test-Path $sessionsDir)) {
-    New-Item -ItemType Directory -Path $sessionsDir -Force | Out-Null
-    Write-Host "Created sessions directory"
-}
-
-Write-Host "AVDSessionWatch deployment completed successfully!"
-Write-Host "Monitoring will begin automatically via scheduled tasks"
-'@
-
-    $deployScript | Out-File -FilePath "$packageDir\install-avdsessionwatch.ps1" -Encoding UTF8
-    Write-DeployLog "Created install-avdsessionwatch.ps1"
 
     return $packageDir
 }
 
 # Function to upload package to Azure Storage (if using storage account)
-function Upload-ToAzureStorage {
+function Send-ToAzureStorage {
     param([string]$PackageDir)
     
     if (-not $StorageAccountName) {
@@ -203,30 +124,7 @@ function Deploy-ToVM {
     Write-DeployLog "Deploying to VM: $VMName"
     
     try {
-        if ($TestMode) {
-            Write-DeployLog "TEST MODE: Would deploy to $VMName with files: $($FileUris -join ', ')"
-            return $true
-        }
-        
-        # Prepare command based on deployment method
-        if ($UseLocalFiles) {
-            # For local deployment, we need to copy files first
-            $command = @"
-# Copy package files to temp location
-`$tempPath = `$env:TEMP + '\AVDSessionWatchPackage'
-if (Test-Path `$tempPath) { Remove-Item `$tempPath -Recurse -Force }
-New-Item -ItemType Directory -Path `$tempPath -Force | Out-Null
-
-# Download and extract would happen here in real scenario
-# For now, assuming files are already on the VM
-Write-Host 'Local file deployment not yet implemented'
-
-# Run installation
-PowerShell.exe -ExecutionPolicy Bypass -File `$tempPath\install-monitoring.ps1
-"@
-        } else {
-            # For storage account deployment
-            $command = @"
+        $command = @"
 # Create temp directory
 `$tempPath = `$env:TEMP + '\AVDSessionWatchPackage'
 if (Test-Path `$tempPath) { Remove-Item `$tempPath -Recurse -Force }
@@ -238,8 +136,7 @@ $($FileUris | ForEach-Object { "Invoke-WebRequest -Uri '$_' -OutFile ('`$tempPat
 # Run installation
 PowerShell.exe -ExecutionPolicy Bypass -File `$tempPath\install-avdsessionwatch.ps1
 "@
-        }
-        
+       
         # Deploy using Custom Script Extension
         $extensionName = "AVDSessionWatchSetup"
         
@@ -252,25 +149,14 @@ PowerShell.exe -ExecutionPolicy Bypass -File `$tempPath\install-avdsessionwatch.
                 -Run "install-avdsessionwatch.ps1" `
                 -Name $extensionName `
                 -ForceRerun (Get-Date).Ticks.ToString()
-        } else {
-            # Use command execution for local files
-            $result = Set-AzVMCustomScriptExtension `
-                -ResourceGroupName $ResourceGroupName `
-                -VMName $VMName `
-                -Location $Location `
-                -CommandToExecute "powershell.exe -Command `"$command`"" `
-                -Name $extensionName `
-                -ForceRerun (Get-Date).Ticks.ToString()
-        }
-        
-        if ($result.ProvisioningState -eq "Succeeded") {
-            Write-DeployLog "Successfully deployed to $VMName"
-            return $true
-        } else {
-            Write-DeployLog "Failed to deploy to $VMName - Status: $($result.ProvisioningState)" "ERROR"
-            return $false
-        }
-        
+            if ($result.ProvisioningState -eq "Succeeded") {
+                Write-DeployLog "Successfully deployed to $VMName"
+                return $true
+            } else {
+                Write-DeployLog "Failed to deploy to $VMName - Status: $($result.ProvisioningState)" "ERROR"
+                return $false
+            }
+       }
     } catch {
         Write-DeployLog "Error deploying to $VMName : $_" "ERROR"
         return $false
@@ -281,7 +167,8 @@ PowerShell.exe -ExecutionPolicy Bypass -File `$tempPath\install-avdsessionwatch.
 Write-DeployLog "Starting AVDSessionWatch deployment"
 Write-DeployLog "Target VMs: $($VMNames -join ', ')"
 Write-DeployLog "Resource Group: $ResourceGroupName"
-Write-DeployLog "Test Mode: $TestMode"
+Write-DeployLog "Storage Account: $StorageAccountName"
+Write-DeployLog "Upload to Storage Only: $UploadToStorageOnly"
 
 # Check if Azure PowerShell module is available
 if (-not (Get-Module -ListAvailable -Name Az.Compute)) {
@@ -297,6 +184,10 @@ try {
         Write-DeployLog "Not connected to Azure. Please run Connect-AzAccount first." "ERROR"
         exit 1
     }
+    if ($SubscriptionId) {
+        Set-AzContext -SubscriptionId $SubscriptionId | Out-Null
+        Write-DeployLog "Switched to Subscription ID: $SubscriptionId"
+    }
     Write-DeployLog "Connected to Azure - Subscription: $($context.Subscription.Name)"
 } catch {
     Write-DeployLog "Error checking Azure connection: $_" "ERROR"
@@ -308,55 +199,55 @@ $packageDir = New-AVDSessionWatchPackage
 
 # Upload to storage if specified
 $fileUris = @()
-if (-not $UseLocalFiles) {
-    $fileUris = Upload-ToAzureStorage -PackageDir $packageDir
-    if (-not $fileUris) {
-        Write-DeployLog "Failed to upload files, switching to local deployment mode" "WARN"
-        $UseLocalFiles = $true
-    }
+$fileUris = Send-ToAzureStorage -PackageDir $packageDir
+if (-not $fileUris) {
+    Write-DeployLog "Failed to upload files, stopping script" "WARN"
+    exit 1
 }
 
-# Deploy to each VM
-$successCount = 0
-$failCount = 0
+if ($UploadToStorageOnly -eq $false) {
+    # Deploy to each VM
+    $successCount = 0
+    $failCount = 0
 
-foreach ($vmName in $VMNames) {
-    Write-DeployLog "Processing VM: $vmName"
-    
-    # Verify VM exists
-    try {
-        $vm = Get-AzVM -ResourceGroupName $ResourceGroupName -Name $vmName -ErrorAction Stop
-        Write-DeployLog "Found VM: $vmName (Status: $($vm.StatusCode))"
-    } catch {
-        Write-DeployLog "VM not found: $vmName" "ERROR"
-        $failCount++
-        continue
+    foreach ($vmName in $VMNames) {
+        Write-DeployLog "Processing VM: $vmName"
+        
+        # Verify VM exists
+        try {
+            $vm = Get-AzVM -ResourceGroupName $ResourceGroupName -Name $vmName -ErrorAction Stop
+            Write-DeployLog "Found VM: $vmName (Status: $($vm.StatusCode))"
+        } catch {
+            Write-DeployLog "VM not found: $vmName" "ERROR"
+            $failCount++
+            continue
+        }
+        
+        # Deploy to VM
+        if (Deploy-ToVM -VMName $vmName -FileUris $fileUris) {
+            $successCount++
+        } else {
+            $failCount++
+        }
+
+        if ($failCount -eq 0) {
+            Write-DeployLog "All deployments completed successfully!"
+        } else {
+            Write-DeployLog "Some deployments failed. Check the log for details." "WARN"
+        }
     }
-    
-    # Deploy to VM
-    if (Deploy-ToVM -VMName $vmName -FileUris $fileUris) {
-        $successCount++
-    } else {
-        $failCount++
-    }
+
+    # Summary
+    Write-DeployLog "Deployment Summary:"
+    Write-DeployLog "  Total VMs: $($VMNames.Count)"
+    Write-DeployLog "  Successful: $successCount"
+    Write-DeployLog "  Failed: $failCount"
+} else {
+    Write-DeployLog "Upload to storage only mode enabled, skipping VM deployment"
 }
 
 # Cleanup
 if (Test-Path $packageDir) {
     Remove-Item $packageDir -Recurse -Force
     Write-DeployLog "Cleaned up package directory"
-}
-
-# Summary
-Write-DeployLog "Deployment Summary:"
-Write-DeployLog "  Total VMs: $($VMNames.Count)"
-Write-DeployLog "  Successful: $successCount"
-Write-DeployLog "  Failed: $failCount"
-
-if ($failCount -eq 0) {
-    Write-DeployLog "All deployments completed successfully!"
-    exit 0
-} else {
-    Write-DeployLog "Some deployments failed. Check the log for details." "WARN"
-    exit $failCount
 }

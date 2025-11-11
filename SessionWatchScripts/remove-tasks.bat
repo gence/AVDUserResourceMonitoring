@@ -1,27 +1,27 @@
 @echo off
 REM Batch file to remove scheduled tasks for AVDSessionWatch
-REM Author: GitHub Copilot
+REM Author: GitHub Copilot, Gence Soysal
 REM Date: November 8, 2025
 REM Run this file as Administrator
 
 echo Removing AVDSessionWatch scheduled tasks...
 echo.
 
-echo Removing task: AVD\AVDSessionWatch-AVDUserProcesses
-schtasks /delete /tn "AVD\AVDSessionWatch-AVDUserProcesses" /f
+echo Removing task: AVD\AVDSessionWatch-UserProcesses
+schtasks /delete /tn "AVD\AVDSessionWatch-UserProcesses" /f
 if %errorlevel%==0 (
-    echo SUCCESS: AVDUserProcesses task removed
+    echo SUCCESS: UserProcesses task removed
 ) else (
-    echo ERROR: Failed to remove AVDUserProcesses task (may not exist)
+    echo ERROR: Failed to remove UserProcesses task (may not exist)
 )
 echo.
 
-echo Removing task: AVD\AVDSessionWatch-AVDSessions
-schtasks /delete /tn "AVD\AVDSessionWatch-AVDSessions" /f
+echo Removing task: AVD\AVDSessionWatch-UserSessions
+schtasks /delete /tn "AVD\AVDSessionWatch-UserSessions" /f
 if %errorlevel%==0 (
-    echo SUCCESS: AVDSessions task removed
+    echo SUCCESS: UserSessions task removed
 ) else (
-    echo ERROR: Failed to remove AVDSessions task (may not exist)
+    echo ERROR: Failed to remove UserSessions task (may not exist)
 )
 echo.
 

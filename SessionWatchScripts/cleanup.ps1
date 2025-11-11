@@ -1,5 +1,5 @@
 # PowerShell script to clean up files older than 7 days
-# Author: GitHub Copilot
+# Author: GitHub Copilot, Gence Soysal
 # Date: November 8, 2025
 
 # Simple logging function
@@ -19,8 +19,8 @@ $script:logFile = Join-Path $scriptPath "cleanup.log"
 
 Write-Log "Starting cleanup - retention: $retentionDays days, cutoff: $($cutoffDate.ToString('MM-dd HH:mm'))"
 $foldersToClean = @(
-    (Join-Path $scriptPath "tasklist"),
-    (Join-Path $scriptPath "sessions")
+    (Join-Path $scriptPath "AVDUserProcesses"),
+    (Join-Path $scriptPath "AVDUserSessions")
 )
 
 foreach ($folder in $foldersToClean) {

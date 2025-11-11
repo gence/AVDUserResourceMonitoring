@@ -95,3 +95,24 @@ foreach ($rg in $resourceGroups) {
         Write-Host "No Windows VMs found in $rg"
     }
 }
+
+# METHOD C: Update all VMs in resource group
+function Update-AllVMsInResourceGroup {
+    param([string]$TargetResourceGroupName = $resourceGroupName)
+    
+    Write-Host "Getting all Windows VMs in resource group: $TargetResourceGroupName" -ForegroundColor Green
+    $allVMs = Get-AzVM -ResourceGroupName $TargetResourceGroupName | Where-Object { $_.StorageProfile.OsDisk.OsType -eq "Windows" }
+    $vmNames = $allVMs.Name
+    
+    Write-Host "Found $($vmNames.Count) Windows VMs: $($vmNames -join ', ')" -ForegroundColor Cyan
+    if ($vmNames.Count -gt 0) {
+        .\deploy-avdsessionwatch.ps1 -VMNames $vmNames -ResourceGroupName $TargetResourceGroupName -StorageAccountName $storageAccountName
+    }
+}
+
+# Test policy compliance
+Get-AzPolicyState -PolicyAssignmentName "deploy-avdsessionwatch-assignment"
+
+# Monitor policy compliance
+$complianceResults = Get-AzPolicyState | Where-Object { $_.PolicyAssignmentName -eq "deploy-avdsessionwatch-assignment" }
+$complianceResults | Group-Object ComplianceState

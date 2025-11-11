@@ -185,7 +185,38 @@
         "tileSettings": {
           "titleContent": {
             "columnMatch": "UserName",
-            "formatter": 1
+            "formatter": 7,
+            "formatOptions": {
+              "linkTarget": "WorkbookTemplate",
+              "workbookContext": {
+                "componentIdSource": "workbook",
+                "resourceIdsSource": "workbook",
+                "templateIdSource": "static",
+                "templateId": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/workbooks/{workbookId}",
+                "typeSource": "workbook",
+                "gallerySource": "workbook",
+                "locationSource": "default",
+                "passSpecificParams": true,
+                "templateParameters": [
+                  {
+                    "name": "TimeRange",
+                    "source": "parameter",
+                    "value": "TimeRange"
+                  },
+                  {
+                    "name": "User",
+                    "source": "column",
+                    "value": "UserName"
+                  },
+                  {
+                    "name": "HostName",
+                    "source": "static",
+                    "value": "All"
+                  }
+                ],
+                "viewerMode": false
+              }
+            }
           },
           "subtitleContent": {
             "columnMatch": "ResourceScore",
@@ -301,8 +332,38 @@
           "formatters": [
             {
               "columnMatch": "UserName",
-              "formatter": 0,
+              "formatter": 7,
               "formatOptions": {
+                "linkTarget": "WorkbookTemplate",
+                "linkIsContextBlade": false,
+                "workbookContext": {
+                  "componentIdSource": "workbook",
+                  "resourceIdsSource": "workbook",
+                  "templateIdSource": "static",
+                  "templateId": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/workbooks/{workbookId}",
+                  "typeSource": "workbook",
+                  "gallerySource": "workbook",
+                  "locationSource": "workbook",
+                  "passSpecificParams": true,
+                  "templateParameters": [
+                    {
+                      "name": "User",
+                      "source": "column",
+                      "value": "UserName"
+                    },
+                    {
+                      "name": "TimeRange",
+                      "source": "parameter",
+                      "value": "TimeRange"
+                    },
+                    {
+                      "name": "HostName",
+                      "source": "static",
+                      "value": "All"
+                    }
+                  ],
+                  "viewerMode": false
+                },
                 "customColumnWidthSetting": "29ch"
               }
             },
@@ -364,6 +425,41 @@
         "visualization": "table",
         "gridSettings": {
           "formatters": [
+            {
+              "columnMatch": "UserName",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "WorkbookTemplate",
+                "workbookContext": {
+                  "componentIdSource": "workbook",
+                  "resourceIdsSource": "workbook",
+                  "templateIdSource": "static",
+                  "templateId": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/workbooks/{workbookId}",
+                  "typeSource": "workbook",
+                  "gallerySource": "workbook",
+                  "locationSource": "default",
+                  "passSpecificParams": true,
+                  "templateParameters": [
+                    {
+                      "name": "User",
+                      "source": "column",
+                      "value": "UserName"
+                    },
+                    {
+                      "name": "TimeRange",
+                      "source": "parameter",
+                      "value": "TimeRange"
+                    },
+                    {
+                      "name": "HostName",
+                      "source": "static",
+                      "value": "All"
+                    }
+                  ],
+                  "viewerMode": false
+                }
+              }
+            },
             {
               "columnMatch": "AvgCPUPercentage",
               "formatter": 8,
@@ -603,8 +699,37 @@
           "formatters": [
             {
               "columnMatch": "UserName",
-              "formatter": 0,
+              "formatter": 7,
               "formatOptions": {
+                "linkTarget": "WorkbookTemplate",
+                "workbookContext": {
+                  "componentIdSource": "workbook",
+                  "resourceIdsSource": "workbook",
+                  "templateIdSource": "static",
+                  "templateId": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/workbooks/{workbookId}",
+                  "typeSource": "workbook",
+                  "gallerySource": "workbook",
+                  "locationSource": "default",
+                  "passSpecificParams": true,
+                  "templateParameters": [
+                    {
+                      "name": "User",
+                      "source": "column",
+                      "value": "UserName"
+                    },
+                    {
+                      "name": "TimeRange",
+                      "source": "parameter",
+                      "value": "TimeRange"
+                    },
+                    {
+                      "name": "HostName",
+                      "source": "static",
+                      "value": "All"
+                    }
+                  ],
+                  "viewerMode": false
+                },
                 "customColumnWidthSetting": "31ch"
               }
             },
@@ -681,7 +806,7 @@
     }
   ],
   "fallbackResourceIds": [
-    "Azure Monitor"
+    "azure monitor"
   ],
   "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
 }
