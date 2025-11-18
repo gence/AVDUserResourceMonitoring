@@ -10,10 +10,10 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$ResourceGroupName,
     
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [string]$DCRPrefix = "DCR-AVDResMon",
     
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [string]$DCEName = "DCE-AVDResMon",
     
     [Parameter(Mandatory=$false)]
@@ -192,11 +192,6 @@ function New-DataCollectionEndpoint {
             # DCE doesn't exist, continue with creation
         }
         
-        if ($TestMode) {
-            Write-Host "TEST MODE: Would create DCE '$DCEName' in location '$Location'" "TEST"
-            return @{ Id = "/subscriptions/test-sub/resourceGroups/$ResourceGroupName/providers/Microsoft.Insights/dataCollectionEndpoints/$DCEName" }
-        }
-        
         # Create DCE
         $dce = New-AzDataCollectionEndpoint -ResourceGroupName $ResourceGroupName -Name $DCEName -Location $Location -NetworkAclsPublicNetworkAccess "Enabled"
         
@@ -240,7 +235,7 @@ function Get-TransformKQL {
         }
     }
     
-    $transformKQL = "source | project _ResourceId, d = split(RawData,`",`") | project $($columnMappings -join ', ')"
+    $transformKQL = "source | project d = split(RawData,`",`") | project $($columnMappings -join ', ')"
     
     Write-Host "Generated transform KQL: $transformKQL"
     return $transformKQL
@@ -254,7 +249,6 @@ function New-DataCollectionRule {
         [string]$Location,
         [object]$Workspace,
         [object]$DCE,
-        [array]$Columns,
         [string[]]$FilePatterns,
         [string]$TableName,
         [string]$TransformKQL
@@ -274,16 +268,18 @@ function New-DataCollectionRule {
             # DCR doesn't exist, continue with creation
         }
         
-        # Create stream columns (input format for log files)
-        $streamColumns = @()
-        $streamColumns += @{ name = "TimeGenerated"; type = "datetime" }
-        $streamColumns += @{ name = "RawData"; type = "string" }
-        $streamColumns += @{ name = "FilePath"; type = "string" }
-        $streamColumns += @{ name = "Computer"; type = "string" }
-        
         # Create stream name - keep it simple and predictable
         $streamName = "Custom-Text-$TableName"
         Write-Host "Using stream name: $streamName"
+        
+        # For text-based log files, the stream declaration needs standard text ingestion columns
+        # The transform KQL will convert RawData to the actual table columns
+        $textStreamColumns = @(
+            @{ name = "TimeGenerated"; type = "datetime" }
+            @{ name = "RawData"; type = "string" }
+            @{ name = "FilePath"; type = "string" }
+            @{ name = "Computer"; type = "string" }
+        )
         
         # Create DCR configuration
         $dcrConfig = @{
@@ -292,7 +288,7 @@ function New-DataCollectionRule {
                 dataCollectionEndpointId = $DCE.Id
                 streamDeclarations = @{
                     $streamName = @{
-                        columns = $streamColumns
+                        columns = $textStreamColumns
                     }
                 }
                 dataSources = @{
@@ -428,7 +424,7 @@ if (-not $dce) {
 }
 
 # Step 5: Create DCR for each table from schema files
-$scriptDir = Split-Path -Parent $MyInvocation.ScriptName
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 if ([string]::IsNullOrEmpty($SchemaFolderPath)) {
     $SchemaFolderPath = $scriptDir
@@ -457,7 +453,7 @@ foreach ($file in $schemaFiles) {
     Write-Host "Using file patterns: $($FilePatterns -join ', ')"
 
     # Create Data Collection Rule (DCR)
-    $dcr = New-DataCollectionRule -DCRName $DCRName -ResourceGroupName $ResourceGroupName -Location $Location -Workspace $workspace -DCE $dce -Columns $columns -FilePatterns $FilePatterns -TableName $TableNameShort -TransformKQL $transformKQL
+    $dcr = New-DataCollectionRule -DCRName $DCRName -ResourceGroupName $ResourceGroupName -Location $Location -Workspace $workspace -DCE $dce -FilePatterns $FilePatterns -TableName $TableName -TransformKQL $transformKQL
 
     if ($dcr) {
         Write-Host "DCR creation completed successfully!" "SUCCESS"

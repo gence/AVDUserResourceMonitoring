@@ -41,14 +41,18 @@ function Write-DeployLog {
 function New-AVDSessionWatchPackage {
     Write-DeployLog "Creating package..."
     
+    # Get the script directory and calculate the SessionWatchScripts path
+    $scriptDir = Split-Path -Parent $MyInvocation.PSCommandPath
+    $sessionWatchScriptsDir = Join-Path (Split-Path -Parent $scriptDir) "SessionWatchScripts"
+    
     # Define files to package
     $filesToPackage = @(
-        "processes.ps1",
-        "sessions.ps1", 
-        "cleanup.ps1",
-        "setup-tasks.bat",
-        "remove-tasks.bat",
-        "install-avdsessionwatch.ps1"
+        (Join-Path $sessionWatchScriptsDir "processes.ps1"),
+        (Join-Path $sessionWatchScriptsDir "sessions.ps1"), 
+        (Join-Path $sessionWatchScriptsDir "cleanup.ps1"),
+        (Join-Path $sessionWatchScriptsDir "setup-tasks.bat"),
+        (Join-Path $sessionWatchScriptsDir "remove-tasks.bat"),
+        (Join-Path $sessionWatchScriptsDir "install-avdsessionwatch.ps1")
     )
     
     # Create package directory

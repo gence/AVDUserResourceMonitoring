@@ -268,12 +268,14 @@ if (-not $workspace) {
 }
 
 # Step 4: Create custom tables from schema files
-$scriptDir = Split-Path -Parent $MyInvocation.ScriptName
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 
 if ([string]::IsNullOrEmpty($SchemaFolderPath)) {
     $SchemaFolderPath = $scriptDir
 }
+
+Write-Host "Using schema folder path: $SchemaFolderPath"
 
 $schemaFiles = @()
 $schemaFiles += Get-ChildItem -Path $SchemaFolderPath -Filter "*.json" | ForEach-Object { $_.FullName }

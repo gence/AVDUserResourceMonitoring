@@ -53,3 +53,6 @@ Use the curated examples in `Dashboard/kusto-queries.kql` directly inside the Lo
 1. Fork the repo.
 2. Add or refine scripts / queries.
 3. Submit a pull request with clear description referencing modified files.
+
+## Troubleshooting
+- Ensure Storage Account is available publicly

@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$storageAccountName,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [string]$ContainerName = "avdsessionwatch-scripts",
 
     [Parameter(Mandatory=$true)]
@@ -21,6 +21,9 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$policyScope = "/subscriptions/$subscriptionId"
 )
+
+# Get the script directory path
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Create storage account with Entra ID authentication enabled
 Write-Host "Setting up storage account with Entra ID authentication..." -ForegroundColor Yellow
@@ -49,11 +52,18 @@ try {
     $ctx = New-AzStorageContext -StorageAccountName $storageAccountName -StorageAccountKey $storageKey
 }
 
-# Create container (private access, no public blob access)
-New-AzStorageContainer -Name "avdsessionwatch-scripts" -Context $ctx -Permission Off
+$storageContainer = Get-AzStorageContainer -Context $ctx -Name $ContainerName -ErrorAction SilentlyContinue
+if (-not $storageContainer) {
+    Write-Host "Creating new storage container: $ContainerName"
+    # Create container (private access, no public blob access)
+    New-AzStorageContainer -Name $ContainerName -Context $ctx -Permission Off
+}
+
+# Get the script directory path
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Upload monitoring files to Azure storage using the deployment script
-.\deploy-avdsessionwatch.ps1 -ResourceGroupName $resourceGroupName -StorageAccountName $storageAccountName -UploadToStorageOnly $true
+& "$scriptDir\deploy-avdsessionwatch.ps1" -ResourceGroupName $resourceGroupName -StorageAccountName $storageAccountName -UploadToStorageOnly $true
 
 # Create and assign Azure Policy
 # ------------------------------
@@ -66,18 +76,40 @@ Write-Host "Creating new policy definition..." -ForegroundColor Yellow
 
 try {
     # Read and validate JSON
-    $policyJson = Get-Content -Raw -Path ".\azure-policy-avdsessionwatch.json" -Encoding UTF8
+    $policyJsonContent = Get-Content -Raw -Path "$scriptDir\azure-policy-avdsessionwatch.json" -Encoding UTF8
     
-    # Test JSON parsing
-    ConvertFrom-Json $policyJson
+    # Parse the JSON
+    $policyObject = ConvertFrom-Json $policyJsonContent
     Write-Host "JSON validation successful" -ForegroundColor Green
+    
+    # Extract the policyRule from the properties if it exists
+    if ($policyObject.properties) {
+        $policyRuleObject = $policyObject.properties.policyRule
+        $parametersObject = $policyObject.properties.parameters
+        $displayName = $policyObject.properties.displayName
+        $description = $policyObject.properties.description
+        
+        # Convert back to JSON strings
+        $policyRule = ($policyRuleObject | ConvertTo-Json -Depth 100 -Compress)
+        $parameters = ($parametersObject | ConvertTo-Json -Depth 100 -Compress)
+    } else {
+        Write-Host "Using entire JSON as policy rule" -ForegroundColor Yellow
+        $policyRule = $policyJsonContent
+        $parameters = "{}"
+        $displayName = "Deploy AVDSessionWatch monitoring to Windows VMs"
+        $description = "Automatically deploy monitoring scripts to new Windows VMs"
+    }
+    
+    Write-Host "Policy rule length: $($policyRule.Length)" -ForegroundColor Green
+    Write-Host "Parameters length: $($parameters.Length)" -ForegroundColor Green
     
     # Create policy definition with minimal parameters to avoid parsing issues
     $policyDefinition = New-AzPolicyDefinition `
-        -Name $policyDefinitionName`
-        -DisplayName "Deploy AVDSessionWatch monitoring to Windows VMs" `
-        -Description "Automatically deploy monitoring scripts to new Windows VMs" `
-        -Policy $policyJson `
+        -Name $policyDefinitionName `
+        -DisplayName $displayName `
+        -Description $description `
+        -Policy $policyRule `
+        -Parameter $parameters `
         -Mode "Indexed"
         
     Write-Host "Policy definition created successfully" -ForegroundColor Green
@@ -125,17 +157,37 @@ Start-Sleep -Seconds 30
 
 # Virtual Machine Contributor role for VM operations
 $vmContributorRole = "9980e02c-c2be-4d73-94e8-173b1dc7cf3c"
-New-AzRoleAssignment `
-    -ObjectId $policyAssignment.IdentityPrincipalId `
-    -RoleDefinitionId $vmContributorRole `
-    -Scope $subscriptionScope
+try {
+    New-AzRoleAssignment `
+        -ObjectId $policyAssignment.IdentityPrincipalId `
+        -RoleDefinitionId $vmContributorRole `
+        -Scope $subscriptionScope `
+        -ErrorAction Stop
+    Write-Host "VM Contributor role assigned successfully" -ForegroundColor Green
+} catch {
+    if ($_.Exception.Message -like "*Conflict*" -or $_.Exception.Message -like "*already exists*") {
+        Write-Host "VM Contributor role already assigned (skipping)" -ForegroundColor Yellow
+    } else {
+        throw
+    }
+}
 
 # Storage Blob Data Contributor role for storage access
 $storageBlobContributorRole = "ba92f5b4-2d11-453d-a403-e96b0029c9fe"
-New-AzRoleAssignment `
-    -ObjectId $policyAssignment.IdentityPrincipalId `
-    -RoleDefinitionId $storageBlobContributorRole `
-    -Scope $storageAccount.Id
+try {
+    New-AzRoleAssignment `
+        -ObjectId $policyAssignment.IdentityPrincipalId `
+        -RoleDefinitionId $storageBlobContributorRole `
+        -Scope $storageAccount.Id `
+        -ErrorAction Stop
+    Write-Host "Storage Blob Contributor role assigned successfully" -ForegroundColor Green
+} catch {
+    if ($_.Exception.Message -like "*Conflict*" -or $_.Exception.Message -like "*already exists*") {
+        Write-Host "Storage Blob Contributor role already assigned (skipping)" -ForegroundColor Yellow
+    } else {
+        throw
+    }
+}
 
 Write-Host "Permissions assigned successfully" -ForegroundColor Green
 
